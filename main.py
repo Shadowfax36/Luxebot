@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 import asyncio
+from datetime import datetime, timedelta
 import database as db
 from config import TOKEN, DEFAULT_PREFIX, BOT_COLOR
 
@@ -18,8 +19,8 @@ COGS = [
     "cogs.automod",
     "cogs.leveling",
     "cogs.features",
+    "cogs.premium_manager",
 ]
-
 @bot.event
 async def on_ready():
     print(f"LuxeBot is online as {bot.user}")
@@ -34,10 +35,11 @@ async def on_ready():
 async def on_guild_join(guild):
     await db.ensure_guild(guild.id)
     print(f"Joined server: {guild.name} ({guild.id})")
+  trial_expires = (datetime.utcnow() + timedelta(days=7)).isoformat()
     async with aiosqlite.connect("luxebot.db") as db_conn:
         await db_conn.execute(
-            "INSERT OR IGNORE INTO premium_servers (guild_id) VALUES (?)",
-            (guild.id,)
+            "INSERT OR IGNORE INTO premium_servers (guild_id, trial_expires_at) VALUES (?, ?)",
+            (guild.id, trial_expires)
         )
         await db_conn.commit()
     for channel in guild.text_channels:

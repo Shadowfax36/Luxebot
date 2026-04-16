@@ -76,12 +76,11 @@ async def init_db():
                 PRIMARY KEY (guild_id, word)
             )
         """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS premium_servers (
-                guild_id INTEGER PRIMARY KEY,
-                expires_at TEXT
-            )
-        """)
+       CREATE TABLE IF NOT EXISTS premium_servers (
+    guild_id INTEGER PRIMARY KEY,
+    expires_at TEXT,
+    trial_expires_at TEXT
+)
         await db.execute("""
             CREATE TABLE IF NOT EXISTS xp_cooldowns (
                 guild_id INTEGER,
