@@ -29,19 +29,27 @@ async def on_ready():
         name=f"{len(bot.guilds)} servers | !help"
     ))
 
+
 @bot.event
 async def on_guild_join(guild):
     await db.ensure_guild(guild.id)
     print(f"Joined server: {guild.name} ({guild.id})")
+    async with aiosqlite.connect("luxebot.db") as db_conn:
+        await db_conn.execute(
+            "INSERT OR IGNORE INTO premium_servers (guild_id) VALUES (?)",
+            (guild.id,)
+        )
+        await db_conn.commit()
     for channel in guild.text_channels:
         if channel.permissions_for(guild.me).send_messages:
             e = discord.Embed(
                 title="Thanks for adding LuxeBot!",
-                description="I'm a premium Discord bot at a fraction of the cost.\n\nType `!help` to see all commands.\n\nTo get started:\n`!setlog #channel` — set mod log channel\n`!setwelcome #channel Welcome!` — set welcome messages\n\nNeed help? Join our support server.",
+                description="Your **7-day free trial** is now active — all premium features unlocked!\n\nType `!help` to see all commands.\n\nAfter your trial, keep all features for **$5/month**:\nwhop.com/luxebot/luxebot-premium\n\nTo get started:\n`!setlog #channel` — mod log\n`!setwelcome #channel Welcome!` — welcome messages",
                 color=BOT_COLOR
             )
             await channel.send(embed=e)
             break
+
 
 @bot.event
 async def on_command_error(ctx, error):
