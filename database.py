@@ -77,21 +77,14 @@ async def init_db():
             )
         """)
 	await db.execute("""
-        CREATE TABLE IF NOT EXISTS premium_servers (
-            guild_id INTEGER PRIMARY KEY,
-            expires_at TEXT,
-            trial_expires_at TEXT
-        )
-    """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS xp_cooldowns (
-                guild_id INTEGER,
-                user_id INTEGER,
-                last_xp TEXT,
-                PRIMARY KEY (guild_id, user_id)
+            CREATE TABLE IF NOT EXISTS premium_servers (
+                guild_id INTEGER PRIMARY KEY,
+                expires_at TEXT,
+                trial_expires_at TEXT
             )
-        """)
-        await db.commit()
+        """)           
+
+
 
 async def get_prefix(guild_id: int) -> str:
     async with aiosqlite.connect(DB_PATH) as db:
