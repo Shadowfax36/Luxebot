@@ -35,7 +35,7 @@ async def on_ready():
 async def on_guild_join(guild):
     await db.ensure_guild(guild.id)
     print(f"Joined server: {guild.name} ({guild.id})")
-  trial_expires = (datetime.utcnow() + timedelta(days=7)).isoformat()
+    trial_expires = (datetime.utcnow() + timedelta(days=7)).isoformat()
     async with aiosqlite.connect("luxebot.db") as db_conn:
         await db_conn.execute(
             "INSERT OR IGNORE INTO premium_servers (guild_id, trial_expires_at) VALUES (?, ?)",
