@@ -20,7 +20,12 @@ COGS = [
     "cogs.leveling",
     "cogs.features",
     "cogs.premium_manager",
+    "cogs.alerts",
+    "cogs.giveaways",
+    "cogs.tickets",
+    "cogs.utilities",
 ]
+
 @bot.event
 async def on_ready():
     print(f"LuxeBot is online as {bot.user}")
