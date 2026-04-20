@@ -36,6 +36,14 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     await db.init_db()
+    from cogs.alerts import init_alerts_db
+    from cogs.giveaways import init_giveaway_db
+    from cogs.tickets import init_ticket_db
+    from cogs.utilities import init_utils_db
+    await init_alerts_db()
+    await init_giveaway_db()
+    await init_ticket_db()
+    await init_utils_db()
     for cog in COGS:
         try:
             await bot.load_extension(cog)
