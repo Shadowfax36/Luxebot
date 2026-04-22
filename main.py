@@ -1,6 +1,5 @@
 import discord
 from discord.ext import commands
-import asyncio
 import aiosqlite
 from datetime import datetime, timedelta
 import database as db
@@ -16,6 +15,7 @@ COGS = [
     "cogs.giveaways",
     "cogs.tickets",
     "cogs.utilities",
+    "cogs.slash_commands",
 ]
 
 
@@ -44,12 +44,21 @@ async def on_ready():
     await init_giveaway_db()
     await init_ticket_db()
     await init_utils_db()
+
     for cog in COGS:
         try:
             await bot.load_extension(cog)
             print(f"Loaded: {cog}")
         except Exception as e:
             print(f"Failed to load {cog}: {e}")
+
+    # Sync slash commands globally
+    try:
+        synced = await bot.tree.sync()
+        print(f"Synced {len(synced)} slash commands")
+    except Exception as e:
+        print(f"Failed to sync slash commands: {e}")
+
     print(f"LuxeBot is online as {bot.user}")
     print(f"Serving {len(bot.guilds)} servers")
 
@@ -71,24 +80,16 @@ async def on_guild_join(guild):
                 title="Thanks for adding LuxeBot!",
                 description=(
                     "Your **7-day free trial** is now active — all premium features unlocked!\n\n"
-                    "Type `!help` to see all commands.\n\n"
+                    "Type `/help` or `!help` to see all commands.\n\n"
+                    "**Manage your server settings:**\n"
+                    "https://luxebot-production.up.railway.app\n\n"
                     "After your trial, keep all features for **$5/month**:\n"
-                    "whop.com/luxebot/luxebot-premium\n\n"
-                    "**Getting started:**\n"
-                    "`!setlog #channel` — set mod log channel\n"
-                    "`!setwelcome #channel Welcome {user}!` — welcome messages\n"
-                    "`!ticket setup` — set up support tickets\n"
-                    "`!gstart 1h 1 Prize` — start a giveaway"
+                    "whop.com/luxebot/luxebot-premium"
                 ),
                 color=BOT_COLOR
             )
             await channel.send(embed=e)
             break
-
-
-@bot.event
-async def on_guild_join(guild):
-    await db.ensure_guild(guild.id)
 
 
 bot.run(TOKEN)
