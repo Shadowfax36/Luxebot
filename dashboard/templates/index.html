@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LuxeBot Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C;
+  --gold-dim: #C9A84C44;
+  --dark: #080808;
+  --dark2: #111111;
+  --dark3: #1a1a1a;
+  --text: #e8e8e8;
+  --muted: #666;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--dark);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--gold-dim);
+  position: relative;
+  z-index: 10;
+}
+
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.8rem;
+  color: var(--gold);
+  letter-spacing: 3px;
+}
+
+.logo span { color: var(--text); }
+
+.nav-btn {
+  padding: 10px 24px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.nav-btn:hover { background: #e8c060; transform: translateY(-1px); }
+
+.nav-btn.outline {
+  background: transparent;
+  color: var(--gold);
+  border: 1px solid var(--gold-dim);
+}
+
+.nav-btn.outline:hover { background: var(--gold-dim); }
+
+.hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80vh;
+  text-align: center;
+  padding: 40px 20px;
+  position: relative;
+}
+
+.hero-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border: 1px solid var(--gold-dim);
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--gold);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 24px;
+}
+
+.hero h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: clamp(3rem, 8vw, 7rem);
+  line-height: 0.95;
+  letter-spacing: 2px;
+  margin-bottom: 24px;
+}
+
+.hero h1 .gold { color: var(--gold); }
+
+.hero p {
+  font-size: 1.1rem;
+  color: var(--muted);
+  max-width: 480px;
+  line-height: 1.7;
+  margin-bottom: 40px;
+}
+
+.hero-btns {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-large {
+  padding: 14px 32px;
+  font-size: 1rem;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s;
+  letter-spacing: 0.5px;
+}
+
+.btn-gold {
+  background: var(--gold);
+  color: #000;
+  border: none;
+}
+
+.btn-gold:hover { background: #e8c060; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201,168,76,0.3); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid #333;
+}
+
+.btn-ghost:hover { border-color: var(--gold-dim); color: var(--gold); }
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 20px;
+  padding: 60px 40px;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+.feature-card {
+  background: var(--dark2);
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
+  padding: 28px;
+  transition: all 0.3s;
+}
+
+.feature-card:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-3px);
+}
+
+.feature-icon {
+  font-size: 2rem;
+  margin-bottom: 16px;
+}
+
+.feature-card h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text);
+}
+
+.feature-card p {
+  font-size: 0.875rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.glow-orb {
+  position: absolute;
+  width: 400px;
+  height: 400px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(201,168,76,0.06) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.orb1 { top: -100px; left: -100px; }
+.orb2 { bottom: -100px; right: -100px; }
+
+footer {
+  text-align: center;
+  padding: 40px;
+  border-top: 1px solid #1a1a1a;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+footer a { color: var(--gold); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="logo">LUXE<span>BOT</span></div>
+  <div style="display:flex;gap:10px">
+    {% if user %}
+      <a href="/servers" class="nav-btn">My Servers</a>
+      <a href="/logout" class="nav-btn outline">Logout</a>
+    {% else %}
+      <a href="/login" class="nav-btn">Login with Discord</a>
+    {% endif %}
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="glow-orb orb1"></div>
+  <div class="glow-orb orb2"></div>
+  <div class="hero-badge">👑 Premium Discord Management</div>
+  <h1>The Bot Your<br>Server <span class="gold">Deserves</span></h1>
+  <p>Moderation, leveling, giveaways, tickets, YouTube alerts, Twitch alerts and more — all for $5/month.</p>
+  <div class="hero-btns">
+    {% if user %}
+      <a href="/servers" class="btn-large btn-gold">Manage Servers</a>
+    {% else %}
+      <a href="/login" class="btn-large btn-gold">Login with Discord</a>
+    {% endif %}
+    <a href="https://whop.com/luxebot/luxebot-premium" target="_blank" class="btn-large btn-ghost">Get Premium — $5/mo</a>
+  </div>
+</section>
+
+<section class="features">
+  <div class="feature-card">
+    <div class="feature-icon">🛡️</div>
+    <h3>Full Moderation</h3>
+    <p>Ban, kick, mute, warn, purge — with auto-escalation after repeated offenses.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🤖</div>
+    <h3>AutoMod</h3>
+    <p>Anti-spam, anti-caps, link filter, bad word filter, anti-raid protection.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">⭐</div>
+    <h3>Leveling System</h3>
+    <p>XP, leaderboards, level-up messages, and automatic role rewards.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🎉</div>
+    <h3>Giveaways</h3>
+    <p>Start giveaways with one command. Winners picked automatically.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">🎫</div>
+    <h3>Ticket System</h3>
+    <p>One-click support tickets with button panels and private channels.</p>
+  </div>
+  <div class="feature-card">
+    <div class="feature-icon">📺</div>
+    <h3>Social Alerts</h3>
+    <p>YouTube, Twitch, and Reddit alerts posted automatically to your server.</p>
+  </div>
+</section>
+
+<footer>
+  <p>LuxeBot — Premium Discord Management · <a href="https://whop.com/luxebot/luxebot-premium">Get Premium</a></p>
+</footer>
+
+</body>
+</html>

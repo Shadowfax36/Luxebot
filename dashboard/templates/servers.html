@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Server — LuxeBot</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --gold: #C9A84C;
+  --gold-dim: #C9A84C44;
+  --dark: #080808;
+  --dark2: #111111;
+  --dark3: #1a1a1a;
+  --text: #e8e8e8;
+  --muted: #666;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--dark);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  min-height: 100vh;
+}
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(201,168,76,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(201,168,76,0.03) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+}
+nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 40px;
+  border-bottom: 1px solid var(--gold-dim);
+}
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.8rem;
+  color: var(--gold);
+  letter-spacing: 3px;
+  text-decoration: none;
+}
+.logo span { color: var(--text); }
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 2px solid var(--gold-dim);
+}
+.logout {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 0.85rem;
+  transition: color 0.2s;
+}
+.logout:hover { color: var(--gold); }
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 60px 40px;
+  position: relative;
+  z-index: 1;
+}
+h1 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 2.5rem;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+}
+.subtitle {
+  color: var(--muted);
+  margin-bottom: 40px;
+  font-size: 0.95rem;
+}
+.servers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+.server-card {
+  background: var(--dark2);
+  border: 1px solid #1e1e1e;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  transition: all 0.25s;
+  cursor: pointer;
+}
+.server-card:hover {
+  border-color: var(--gold-dim);
+  transform: translateY(-3px);
+  background: #141414;
+}
+.server-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  border: 2px solid #222;
+  object-fit: cover;
+}
+.server-icon-placeholder {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--dark3);
+  border: 2px solid #222;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.4rem;
+  color: var(--gold);
+}
+.server-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-align: center;
+  color: var(--text);
+}
+.server-btn {
+  padding: 8px 20px;
+  background: var(--gold);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.8rem;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+}
+.empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--muted);
+}
+.empty h2 {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 1.8rem;
+  letter-spacing: 2px;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.empty a {
+  color: var(--gold);
+  text-decoration: none;
+}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="/" class="logo">LUXE<span>BOT</span></a>
+  <div class="user-info">
+    {% if user %}
+      {% if user.avatar %}
+        <img src="https://cdn.discordapp.com/avatars/{{ user.id }}/{{ user.avatar }}.png" class="user-avatar" alt="avatar">
+      {% endif %}
+      <span>{{ user.username }}</span>
+      <a href="/logout" class="logout">Logout</a>
+    {% endif %}
+  </div>
+</nav>
+
+<div class="container">
+  <h1>Select a Server</h1>
+  <p class="subtitle">Choose a server to manage with LuxeBot</p>
+
+  {% if guilds %}
+  <div class="servers-grid">
+    {% for guild in guilds %}
+    <a href="/dashboard/{{ guild.id }}" class="server-card">
+      {% if guild.icon %}
+        <img src="https://cdn.discordapp.com/icons/{{ guild.id }}/{{ guild.icon }}.png" class="server-icon" alt="{{ guild.name }}">
+      {% else %}
+        <div class="server-icon-placeholder">{{ guild.name[0] }}</div>
+      {% endif %}
+      <div class="server-name">{{ guild.name }}</div>
+      <div class="server-btn">Manage</div>
+    </a>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty">
+    <h2>No Servers Found</h2>
+    <p>You need to be an admin of a server that has LuxeBot.<br>
+    <a href="https://whop.com/luxebot/luxebot-premium" target="_blank">Add LuxeBot to a server →</a></p>
+  </div>
+  {% endif %}
+</div>
+
+</body>
+</html>
