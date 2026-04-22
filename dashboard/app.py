@@ -1,10 +1,7 @@
 import os
-import json
-import aiosqlite
+import requests
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from functools import wraps
-import requests
-from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.getenv("DASHBOARD_SECRET", "luxebot_dashboard_secret")
@@ -12,8 +9,9 @@ app.secret_key = os.getenv("DASHBOARD_SECRET", "luxebot_dashboard_secret")
 DISCORD_CLIENT_ID = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DISCORD_REDIRECT_URI = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:5000/callback")
+BOT_API_URL = os.getenv("BOT_API_URL", "")
+API_SECRET = os.getenv("DASHBOARD_SECRET", "luxebot123")
 DISCORD_API = "https://discord.com/api/v10"
-DB_PATH = "luxebot.db"
 
 
 def login_required(f):
@@ -25,6 +23,23 @@ def login_required(f):
     return decorated
 
 
+def bot_api(method, path, data=None):
+    if not BOT_API_URL:
+        return None
+    try:
+        headers = {"X-API-Key": API_SECRET, "Content-Type": "application/json"}
+        url = f"{BOT_API_URL}{path}"
+        if method == "GET":
+            resp = requests.get(url, headers=headers, timeout=5)
+        else:
+            resp = requests.post(url, headers=headers, json=data, timeout=5)
+        if resp.status_code == 200:
+            return resp.json()
+    except Exception as e:
+        print(f"Bot API error: {e}")
+    return None
+
+
 def get_user_guilds():
     token = session.get("access_token")
     if not token:
@@ -33,7 +48,6 @@ def get_user_guilds():
     resp = requests.get(f"{DISCORD_API}/users/@me/guilds", headers=headers)
     if resp.status_code == 200:
         guilds = resp.json()
-        # Only return guilds where user has MANAGE_GUILD permission
         return [g for g in guilds if (int(g["permissions"]) & 0x20) == 0x20]
     return []
 
@@ -105,53 +119,30 @@ def servers():
 @app.route("/dashboard/<guild_id>")
 @login_required
 def dashboard(guild_id):
-    import asyncio
-    loop = asyncio.new_event_loop()
-
-    async def get_settings():
-        async with aiosqlite.connect(DB_PATH) as db:
-            async with db.execute(
-                "SELECT * FROM guilds WHERE guild_id = ?", (int(guild_id),)
-            ) as cursor:
-                guild_settings = await cursor.fetchone()
-            async with db.execute(
-                "SELECT * FROM automod_settings WHERE guild_id = ?", (int(guild_id),)
-            ) as cursor:
-                automod = await cursor.fetchone()
-            async with db.execute(
-                "SELECT guild_id, expires_at, trial_expires_at FROM premium_servers WHERE guild_id = ?",
-                (int(guild_id),)
-            ) as cursor:
-                premium = await cursor.fetchone()
-        return guild_settings, automod, premium
-
-    guild_settings, automod, premium = loop.run_until_complete(get_settings())
-    loop.close()
-
-    # Get guild info from Discord
-    token = session.get("access_token")
-    headers = {"Authorization": f"Bearer {token}"}
     guilds = get_user_guilds()
     guild = next((g for g in guilds if g["id"] == guild_id), None)
-
     if not guild:
         return redirect(url_for("servers"))
 
-    is_premium = False
-    if premium:
-        now = datetime.utcnow().isoformat()
-        if premium[1] and premium[1] > now:
-            is_premium = True
-        if premium[2] and premium[2] > now:
-            is_premium = True
+    settings = bot_api("GET", f"/api/guild/{guild_id}/settings") or {
+        "prefix": "!",
+        "welcome_message": "",
+        "automod": {
+            "anti_spam": False,
+            "anti_caps": False,
+            "anti_links": False,
+            "anti_mentions": False,
+        },
+        "is_premium": False
+    }
 
     return render_template(
         "dashboard.html",
         guild=guild,
         guild_id=guild_id,
-        settings=guild_settings,
-        automod=automod,
-        is_premium=is_premium,
+        settings=settings,
+        automod=settings.get("automod", {}),
+        is_premium=settings.get("is_premium", False),
         user=session.get("user")
     )
 
@@ -159,48 +150,11 @@ def dashboard(guild_id):
 @app.route("/dashboard/<guild_id>/save", methods=["POST"])
 @login_required
 def save_settings(guild_id):
-    import asyncio
-    data = request.json
-
-    async def update():
-        async with aiosqlite.connect(DB_PATH) as db:
-            if "prefix" in data:
-                await db.execute(
-                    "UPDATE guilds SET prefix = ? WHERE guild_id = ?",
-                    (data["prefix"], int(guild_id))
-                )
-            if "welcome_message" in data:
-                await db.execute(
-                    "UPDATE guilds SET welcome_message = ? WHERE guild_id = ?",
-                    (data["welcome_message"], int(guild_id))
-                )
-            if "anti_spam" in data:
-                await db.execute(
-                    "UPDATE automod_settings SET anti_spam = ? WHERE guild_id = ?",
-                    (1 if data["anti_spam"] else 0, int(guild_id))
-                )
-            if "anti_caps" in data:
-                await db.execute(
-                    "UPDATE automod_settings SET anti_caps = ? WHERE guild_id = ?",
-                    (1 if data["anti_caps"] else 0, int(guild_id))
-                )
-            if "anti_links" in data:
-                await db.execute(
-                    "UPDATE automod_settings SET anti_links = ? WHERE guild_id = ?",
-                    (1 if data["anti_links"] else 0, int(guild_id))
-                )
-            if "anti_mentions" in data:
-                await db.execute(
-                    "UPDATE automod_settings SET anti_mentions = ? WHERE guild_id = ?",
-                    (1 if data["anti_mentions"] else 0, int(guild_id))
-                )
-            await db.commit()
-
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(update())
-    loop.close()
-
-    return jsonify({"status": "saved"})
+    data = request.json or {}
+    result = bot_api("POST", f"/api/guild/{guild_id}/settings", data)
+    if result:
+        return jsonify({"status": "saved"})
+    return jsonify({"status": "error", "message": "Could not reach bot API"}), 500
 
 
 @app.route("/health")
