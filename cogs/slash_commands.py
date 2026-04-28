@@ -19,7 +19,7 @@ class SlashCommands(commands.Cog):
             description="Premium Discord management for $5/month.\nAll features included — no upsells.",
             color=BOT_COLOR
         )
-        embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/warn` `/warnings` `/purge`", inline=False)
+        embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/unmute` `/warn` `/warnings` `/clearwarnings` `/purge`", inline=False)
         embed.add_field(name="⭐ Leveling", value="`/rank` `/leaderboard`", inline=False)
         embed.add_field(name="🎉 Giveaways", value="`/giveaway` — start a giveaway", inline=False)
         embed.add_field(name="📊 Polls", value="`/poll` — create a yes/no poll", inline=False)
@@ -73,6 +73,18 @@ class SlashCommands(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="unmute", description="Remove a timeout from a member")
+    @app_commands.describe(member="The member to unmute")
+    @app_commands.default_permissions(moderate_members=True)
+    async def slash_unmute(self, interaction: discord.Interaction, member: discord.Member):
+        await member.timeout(None)
+        embed = discord.Embed(
+            title="Member Unmuted",
+            description=f"{member.mention} has been unmuted.",
+            color=0x2ECC71
+        )
+        await interaction.response.send_message(embed=embed)
+
     @app_commands.command(name="warn", description="Warn a member")
     @app_commands.describe(member="The member to warn", reason="Reason for the warning")
     @app_commands.default_permissions(manage_messages=True)
@@ -112,6 +124,28 @@ class SlashCommands(commands.Cog):
             color=0xF39C12
         )
         embed.set_footer(text=f"{len(warns)} warning(s) total")
+        embed.set_thumbnail(url=member.display_avatar.url)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="clearwarnings", description="Clear all warnings for a member")
+    @app_commands.describe(member="The member to clear warnings for")
+    @app_commands.default_permissions(manage_messages=True)
+    async def slash_clearwarnings(self, interaction: discord.Interaction, member: discord.Member):
+        warns = await db.get_warnings(interaction.guild.id, member.id)
+        if not warns:
+            embed = discord.Embed(
+                title="No Warnings to Clear",
+                description=f"{member.mention} has no warnings.",
+                color=0x95A5A6
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        await db.clear_warnings(interaction.guild.id, member.id)
+        embed = discord.Embed(
+            title="Warnings Cleared",
+            description=f"Cleared **{len(warns)}** warning(s) for {member.mention}.",
+            color=0x2ECC71
+        )
         embed.set_thumbnail(url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
