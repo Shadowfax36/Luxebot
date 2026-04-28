@@ -1,9 +1,11 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
+import aiosqlite
 import database as db
 
 BOT_COLOR = 0xC9A84C
+DB_PATH = "luxebot.db"
 
 
 class SlashCommands(commands.Cog):
@@ -20,6 +22,8 @@ class SlashCommands(commands.Cog):
             color=BOT_COLOR
         )
         embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/unmute` `/warn` `/warnings` `/clearwarnings` `/purge`", inline=False)
+        embed.add_field(name="👋 Welcome", value="`/setwelcome` `/setgoodbye` `/setjoinrole` `/testwelcome`", inline=False)
+        embed.add_field(name="🎭 Reaction Roles", value="`/reactionrole` `/removereactionrole` `/listreactionroles`", inline=False)
         embed.add_field(name="⭐ Leveling", value="`/rank` `/leaderboard`", inline=False)
         embed.add_field(name="🎉 Giveaways", value="`/giveaway` — start a giveaway", inline=False)
         embed.add_field(name="📊 Polls", value="`/poll` — create a yes/no poll", inline=False)
@@ -157,6 +161,189 @@ class SlashCommands(commands.Cog):
         await interaction.channel.purge(limit=amount)
         await interaction.followup.send(f"Deleted {amount} messages.", ephemeral=True)
 
+    # ── Welcome ───────────────────────────────────────────────
+
+    @app_commands.command(name="setwelcome", description="Set the welcome message and channel for new members")
+    @app_commands.describe(
+        channel="Channel to send welcome messages in",
+        message="Welcome message. Use {user}, {server}, {membercount} as variables"
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setwelcome(self, interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "UPDATE guilds SET welcome_channel = ?, welcome_message = ? WHERE guild_id = ?",
+                (channel.id, message, interaction.guild.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Welcome Message Set",
+            description=f"Welcome messages will be sent in {channel.mention}.\n\n**Message:**\n{message}",
+            color=BOT_COLOR
+        )
+        embed.set_footer(text="Variables: {user} {server} {membercount}")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setgoodbye", description="Set the goodbye message for members who leave")
+    @app_commands.describe(
+        channel="Channel to send goodbye messages in",
+        message="Goodbye message. Use {user}, {server}, {membercount} as variables"
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setgoodbye(self, interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "UPDATE guilds SET goodbye_message = ? WHERE guild_id = ?",
+                (message, interaction.guild.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Goodbye Message Set",
+            description=f"Goodbye messages will be sent in {channel.mention}.\n\n**Message:**\n{message}",
+            color=BOT_COLOR
+        )
+        embed.set_footer(text="Variables: {user} {server} {membercount}")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setjoinrole", description="Set a role to automatically assign to new members")
+    @app_commands.describe(role="The role to give new members when they join")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setjoinrole(self, interaction: discord.Interaction, role: discord.Role):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "UPDATE guilds SET autorole = ? WHERE guild_id = ?",
+                (role.id, interaction.guild.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Auto Role Set",
+            description=f"New members will automatically receive {role.mention} when they join.",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="testwelcome", description="Send a test welcome message to verify your setup")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_testwelcome(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute(
+                "SELECT welcome_channel, welcome_message FROM guilds WHERE guild_id = ?",
+                (interaction.guild.id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+
+        if not row or not row[0]:
+            await interaction.response.send_message(
+                "No welcome message set. Use `/setwelcome` first.",
+                ephemeral=True
+            )
+            return
+
+        channel = interaction.guild.get_channel(row[0])
+        if not channel:
+            await interaction.response.send_message(
+                "Welcome channel not found — it may have been deleted. Use `/setwelcome` to set a new one.",
+                ephemeral=True
+            )
+            return
+
+        message = row[1].replace("{user}", interaction.user.mention)
+        message = message.replace("{server}", interaction.guild.name)
+        message = message.replace("{membercount}", str(interaction.guild.member_count))
+
+        embed = discord.Embed(description=message, color=BOT_COLOR)
+        await channel.send(embed=embed)
+        await interaction.response.send_message(f"Test welcome sent to {channel.mention}!", ephemeral=True)
+
+    # ── Reaction Roles ────────────────────────────────────────
+
+    @app_commands.command(name="reactionrole", description="Assign a role to users who react with an emoji on a message")
+    @app_commands.describe(
+        message_id="ID of the message to add the reaction to",
+        emoji="The emoji users react with",
+        role="The role to assign"
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_reactionrole(self, interaction: discord.Interaction, message_id: str, emoji: str, role: discord.Role):
+        try:
+            msg_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("Invalid message ID.", ephemeral=True)
+            return
+
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO reaction_roles (guild_id, message_id, emoji, role_id) VALUES (?, ?, ?, ?)",
+                (interaction.guild.id, msg_id, emoji, role.id)
+            )
+            await db_conn.commit()
+
+        # Try to add the reaction to the target message
+        for channel in interaction.guild.text_channels:
+            try:
+                msg = await channel.fetch_message(msg_id)
+                await msg.add_reaction(emoji)
+                break
+            except Exception:
+                continue
+
+        embed = discord.Embed(
+            title="Reaction Role Set",
+            description=f"Reacting with {emoji} on message `{msg_id}` will assign {role.mention}.",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="removereactionrole", description="Remove a reaction role from a message")
+    @app_commands.describe(
+        message_id="ID of the message",
+        emoji="The emoji to remove the role assignment from"
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_removereactionrole(self, interaction: discord.Interaction, message_id: str, emoji: str):
+        try:
+            msg_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("Invalid message ID.", ephemeral=True)
+            return
+
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?",
+                (interaction.guild.id, msg_id, emoji)
+            )
+            await db_conn.commit()
+
+        embed = discord.Embed(
+            title="Reaction Role Removed",
+            description=f"Removed reaction role for {emoji} on message `{msg_id}`.",
+            color=0x2ECC71
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="listreactionroles", description="List all reaction roles set up in this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_listreactionroles(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute(
+                "SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id = ?",
+                (interaction.guild.id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        if not rows:
+            await interaction.response.send_message("No reaction roles set up.", ephemeral=True)
+            return
+
+        lines = [f"{r[1]} → <@&{r[2]}> (Message ID: `{r[0]}`)" for r in rows]
+        embed = discord.Embed(
+            title="Reaction Roles",
+            description="\n".join(lines),
+            color=BOT_COLOR
+        )
+        embed.set_footer(text=f"{len(rows)} reaction role(s)")
+        await interaction.response.send_message(embed=embed)
+
     # ── Leveling ──────────────────────────────────────────────
 
     @app_commands.command(name="rank", description="Check your rank or another member's rank")
@@ -192,8 +379,6 @@ class SlashCommands(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     async def slash_giveaway(self, interaction: discord.Interaction, duration: str, winners: int, prize: str):
         from datetime import datetime, timedelta
-        import aiosqlite
-        import random
 
         units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
         try:
@@ -221,7 +406,7 @@ class SlashCommands(commands.Cog):
         msg = await interaction.original_response()
         await msg.add_reaction("🎉")
 
-        async with aiosqlite.connect("luxebot.db") as db_conn:
+        async with aiosqlite.connect(DB_PATH) as db_conn:
             await db_conn.execute(
                 "INSERT INTO giveaways (guild_id, channel_id, message_id, prize, winners, ends_at, host_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (interaction.guild.id, interaction.channel.id, msg.id, prize, winners, ends_at, interaction.user.id)
