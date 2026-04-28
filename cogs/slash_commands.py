@@ -19,7 +19,7 @@ class SlashCommands(commands.Cog):
             description="Premium Discord management for $5/month.\nAll features included — no upsells.",
             color=BOT_COLOR
         )
-        embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/warn` `/purge`", inline=False)
+        embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/warn` `/warnings` `/purge`", inline=False)
         embed.add_field(name="⭐ Leveling", value="`/rank` `/leaderboard`", inline=False)
         embed.add_field(name="🎉 Giveaways", value="`/giveaway` — start a giveaway", inline=False)
         embed.add_field(name="📊 Polls", value="`/poll` — create a yes/no poll", inline=False)
@@ -84,6 +84,35 @@ class SlashCommands(commands.Cog):
             description=f"{member.mention} warned. Total warnings: {len(warnings)}\nReason: {reason}",
             color=0xF39C12
         )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="warnings", description="View all warnings for a member")
+    @app_commands.describe(member="The member to check warnings for")
+    @app_commands.default_permissions(manage_messages=True)
+    async def slash_warnings(self, interaction: discord.Interaction, member: discord.Member):
+        warns = await db.get_warnings(interaction.guild.id, member.id)
+        if not warns:
+            embed = discord.Embed(
+                title=f"Warnings for {member.display_name}",
+                description="This member has no warnings. ✅",
+                color=0x2ECC71
+            )
+            await interaction.response.send_message(embed=embed, ephemeral=True)
+            return
+        lines = []
+        for i, w in enumerate(warns):
+            # w: (id, guild_id, user_id, reason, moderator_id, timestamp)
+            reason = w[3]
+            mod_id = w[4]
+            timestamp = w[5][:10] if w[5] else "unknown"
+            lines.append(f"**{i+1}.** {reason} — by <@{mod_id}> on {timestamp}")
+        embed = discord.Embed(
+            title=f"Warnings for {member.display_name}",
+            description="\n".join(lines),
+            color=0xF39C12
+        )
+        embed.set_footer(text=f"{len(warns)} warning(s) total")
+        embed.set_thumbnail(url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="purge", description="Delete a number of messages")
