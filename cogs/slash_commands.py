@@ -8,6 +8,14 @@ BOT_COLOR = 0xC9A84C
 DB_PATH = "luxebot.db"
 
 
+def parse_duration(duration: str) -> int:
+    units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
+    try:
+        return int(duration[:-1]) * units[duration[-1].lower()]
+    except Exception:
+        return 0
+
+
 class SlashCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -22,12 +30,17 @@ class SlashCommands(commands.Cog):
             color=BOT_COLOR
         )
         embed.add_field(name="🛡️ Moderation", value="`/ban` `/kick` `/mute` `/unmute` `/warn` `/warnings` `/clearwarnings` `/purge`", inline=False)
+        embed.add_field(name="🤖 AutoMod", value="`/automod` `/addbadword` `/removebadword`", inline=False)
         embed.add_field(name="👋 Welcome", value="`/setwelcome` `/setgoodbye` `/setjoinrole` `/testwelcome`", inline=False)
         embed.add_field(name="🎭 Reaction Roles", value="`/reactionrole` `/removereactionrole` `/listreactionroles`", inline=False)
-        embed.add_field(name="⭐ Leveling", value="`/rank` `/leaderboard`", inline=False)
-        embed.add_field(name="🎉 Giveaways", value="`/giveaway` — start a giveaway", inline=False)
-        embed.add_field(name="📊 Polls", value="`/poll` — create a yes/no poll", inline=False)
-        embed.add_field(name="🔧 Utility", value="`/ping` `/serverinfo` `/userinfo` `/premium`", inline=False)
+        embed.add_field(name="⚙️ Custom Commands", value="`/addcommand` `/removecommand` `/listcommands`", inline=False)
+        embed.add_field(name="⭐ Leveling", value="`/rank` `/leaderboard` `/setlevelrole` `/setlevelchannel`", inline=False)
+        embed.add_field(name="🎉 Giveaways", value="`/giveaway` `/gend` `/greroll`", inline=False)
+        embed.add_field(name="🎫 Tickets", value="`/ticketsetup` `/ticketpanel` `/ticketsetrole` `/ticketsetlogs`", inline=False)
+        embed.add_field(name="📺 Alerts", value="`/youtubealert` `/twitchalert` `/redditalert` + remove/list variants", inline=False)
+        embed.add_field(name="📊 Polls", value="`/poll` `/multipoll`", inline=False)
+        embed.add_field(name="⏰ Scheduled", value="`/schedulesend` `/schedulerepeat` `/schedulelist` `/schedulecancel`", inline=False)
+        embed.add_field(name="📢 Utility", value="`/announce` `/embed` `/ping` `/serverinfo` `/userinfo` `/premium`", inline=False)
         embed.add_field(name="🖥️ Dashboard", value="[Manage your server settings](https://luxebot-production.up.railway.app)", inline=False)
         embed.set_footer(text="LuxeBot • $5/month • whop.com/luxebot/luxebot-premium")
         await interaction.response.send_message(embed=embed)
@@ -39,11 +52,7 @@ class SlashCommands(commands.Cog):
     @app_commands.default_permissions(ban_members=True)
     async def slash_ban(self, interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
         await member.ban(reason=reason)
-        embed = discord.Embed(
-            title="Member Banned",
-            description=f"{member.mention} has been banned.\nReason: {reason}",
-            color=0xE74C3C
-        )
+        embed = discord.Embed(title="Member Banned", description=f"{member.mention} has been banned.\nReason: {reason}", color=0xE74C3C)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="kick", description="Kick a member from the server")
@@ -51,11 +60,7 @@ class SlashCommands(commands.Cog):
     @app_commands.default_permissions(kick_members=True)
     async def slash_kick(self, interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
         await member.kick(reason=reason)
-        embed = discord.Embed(
-            title="Member Kicked",
-            description=f"{member.mention} has been kicked.\nReason: {reason}",
-            color=0xE67E22
-        )
+        embed = discord.Embed(title="Member Kicked", description=f"{member.mention} has been kicked.\nReason: {reason}", color=0xE67E22)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="mute", description="Timeout a member")
@@ -70,11 +75,7 @@ class SlashCommands(commands.Cog):
             seconds = 600
         until = datetime.utcnow() + timedelta(seconds=seconds)
         await member.timeout(until, reason=reason)
-        embed = discord.Embed(
-            title="Member Muted",
-            description=f"{member.mention} muted for {duration}.\nReason: {reason}",
-            color=0x95A5A6
-        )
+        embed = discord.Embed(title="Member Muted", description=f"{member.mention} muted for {duration}.\nReason: {reason}", color=0x95A5A6)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="unmute", description="Remove a timeout from a member")
@@ -82,11 +83,7 @@ class SlashCommands(commands.Cog):
     @app_commands.default_permissions(moderate_members=True)
     async def slash_unmute(self, interaction: discord.Interaction, member: discord.Member):
         await member.timeout(None)
-        embed = discord.Embed(
-            title="Member Unmuted",
-            description=f"{member.mention} has been unmuted.",
-            color=0x2ECC71
-        )
+        embed = discord.Embed(title="Member Unmuted", description=f"{member.mention} has been unmuted.", color=0x2ECC71)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="warn", description="Warn a member")
@@ -95,11 +92,7 @@ class SlashCommands(commands.Cog):
     async def slash_warn(self, interaction: discord.Interaction, member: discord.Member, reason: str = "No reason provided"):
         await db.add_warning(interaction.guild.id, member.id, reason, interaction.user.id)
         warnings = await db.get_warnings(interaction.guild.id, member.id)
-        embed = discord.Embed(
-            title="Member Warned",
-            description=f"{member.mention} warned. Total warnings: {len(warnings)}\nReason: {reason}",
-            color=0xF39C12
-        )
+        embed = discord.Embed(title="Member Warned", description=f"{member.mention} warned. Total warnings: {len(warnings)}\nReason: {reason}", color=0xF39C12)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="warnings", description="View all warnings for a member")
@@ -108,25 +101,16 @@ class SlashCommands(commands.Cog):
     async def slash_warnings(self, interaction: discord.Interaction, member: discord.Member):
         warns = await db.get_warnings(interaction.guild.id, member.id)
         if not warns:
-            embed = discord.Embed(
-                title=f"Warnings for {member.display_name}",
-                description="This member has no warnings. ✅",
-                color=0x2ECC71
-            )
+            embed = discord.Embed(title=f"Warnings for {member.display_name}", description="This member has no warnings. ✅", color=0x2ECC71)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         lines = []
         for i, w in enumerate(warns):
-            # w: (id, guild_id, user_id, reason, moderator_id, timestamp)
             reason = w[3]
             mod_id = w[4]
             timestamp = w[5][:10] if w[5] else "unknown"
             lines.append(f"**{i+1}.** {reason} — by <@{mod_id}> on {timestamp}")
-        embed = discord.Embed(
-            title=f"Warnings for {member.display_name}",
-            description="\n".join(lines),
-            color=0xF39C12
-        )
+        embed = discord.Embed(title=f"Warnings for {member.display_name}", description="\n".join(lines), color=0xF39C12)
         embed.set_footer(text=f"{len(warns)} warning(s) total")
         embed.set_thumbnail(url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
@@ -137,37 +121,71 @@ class SlashCommands(commands.Cog):
     async def slash_clearwarnings(self, interaction: discord.Interaction, member: discord.Member):
         warns = await db.get_warnings(interaction.guild.id, member.id)
         if not warns:
-            embed = discord.Embed(
-                title="No Warnings to Clear",
-                description=f"{member.mention} has no warnings.",
-                color=0x95A5A6
-            )
+            embed = discord.Embed(title="No Warnings to Clear", description=f"{member.mention} has no warnings.", color=0x95A5A6)
             await interaction.response.send_message(embed=embed, ephemeral=True)
             return
         await db.clear_warnings(interaction.guild.id, member.id)
-        embed = discord.Embed(
-            title="Warnings Cleared",
-            description=f"Cleared **{len(warns)}** warning(s) for {member.mention}.",
-            color=0x2ECC71
-        )
+        embed = discord.Embed(title="Warnings Cleared", description=f"Cleared **{len(warns)}** warning(s) for {member.mention}.", color=0x2ECC71)
         embed.set_thumbnail(url=member.display_avatar.url)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="purge", description="Delete a number of messages")
-    @app_commands.describe(amount="Number of messages to delete")
+    @app_commands.describe(amount="Number of messages to delete (max 100)")
     @app_commands.default_permissions(manage_messages=True)
     async def slash_purge(self, interaction: discord.Interaction, amount: int):
         await interaction.response.defer(ephemeral=True)
         await interaction.channel.purge(limit=amount)
         await interaction.followup.send(f"Deleted {amount} messages.", ephemeral=True)
 
+    # ── AutoMod ───────────────────────────────────────────────
+
+    @app_commands.command(name="automod", description="Toggle an AutoMod filter on or off")
+    @app_commands.describe(filter_type="Filter to toggle: spam, links, caps, mentions", toggle="on or off")
+    @app_commands.choices(
+        filter_type=[
+            app_commands.Choice(name="spam", value="spam"),
+            app_commands.Choice(name="links", value="links"),
+            app_commands.Choice(name="caps", value="caps"),
+            app_commands.Choice(name="mentions", value="mentions"),
+        ],
+        toggle=[
+            app_commands.Choice(name="on", value="on"),
+            app_commands.Choice(name="off", value="off"),
+        ]
+    )
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_automod(self, interaction: discord.Interaction, filter_type: str, toggle: str):
+        settings_map = {"spam": "anti_spam", "links": "anti_links", "caps": "anti_caps", "mentions": "anti_mentions"}
+        setting = settings_map[filter_type]
+        value = 1 if toggle == "on" else 0
+        await db.update_automod_setting(interaction.guild.id, setting, value)
+        embed = discord.Embed(
+            title="AutoMod Updated",
+            description=f"`{filter_type}` filter turned **{toggle}**.",
+            color=BOT_COLOR if value else 0x95A5A6
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="addbadword", description="Add a word to the bad word filter")
+    @app_commands.describe(word="The word to block")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_addbadword(self, interaction: discord.Interaction, word: str):
+        await db.add_badword(interaction.guild.id, word.lower())
+        embed = discord.Embed(title="Bad Word Added", description=f"Added `{word.lower()}` to the filter.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+    @app_commands.command(name="removebadword", description="Remove a word from the bad word filter")
+    @app_commands.describe(word="The word to remove")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_removebadword(self, interaction: discord.Interaction, word: str):
+        await db.remove_badword(interaction.guild.id, word.lower())
+        embed = discord.Embed(title="Bad Word Removed", description=f"Removed `{word.lower()}` from the filter.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     # ── Welcome ───────────────────────────────────────────────
 
     @app_commands.command(name="setwelcome", description="Set the welcome message and channel for new members")
-    @app_commands.describe(
-        channel="Channel to send welcome messages in",
-        message="Welcome message. Use {user}, {server}, {membercount} as variables"
-    )
+    @app_commands.describe(channel="Channel to send welcome messages in", message="Welcome message. Use {user}, {server}, {membercount}")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_setwelcome(self, interaction: discord.Interaction, channel: discord.TextChannel, message: str):
         async with aiosqlite.connect(DB_PATH) as db_conn:
@@ -176,19 +194,12 @@ class SlashCommands(commands.Cog):
                 (channel.id, message, interaction.guild.id)
             )
             await db_conn.commit()
-        embed = discord.Embed(
-            title="Welcome Message Set",
-            description=f"Welcome messages will be sent in {channel.mention}.\n\n**Message:**\n{message}",
-            color=BOT_COLOR
-        )
+        embed = discord.Embed(title="Welcome Message Set", description=f"Sending to {channel.mention}.\n\n**Message:**\n{message}", color=BOT_COLOR)
         embed.set_footer(text="Variables: {user} {server} {membercount}")
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="setgoodbye", description="Set the goodbye message for members who leave")
-    @app_commands.describe(
-        channel="Channel to send goodbye messages in",
-        message="Goodbye message. Use {user}, {server}, {membercount} as variables"
-    )
+    @app_commands.describe(channel="Channel to send goodbye messages in", message="Goodbye message. Use {user}, {server}, {membercount}")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_setgoodbye(self, interaction: discord.Interaction, channel: discord.TextChannel, message: str):
         async with aiosqlite.connect(DB_PATH) as db_conn:
@@ -197,11 +208,7 @@ class SlashCommands(commands.Cog):
                 (message, interaction.guild.id)
             )
             await db_conn.commit()
-        embed = discord.Embed(
-            title="Goodbye Message Set",
-            description=f"Goodbye messages will be sent in {channel.mention}.\n\n**Message:**\n{message}",
-            color=BOT_COLOR
-        )
+        embed = discord.Embed(title="Goodbye Message Set", description=f"Sending to {channel.mention}.\n\n**Message:**\n{message}", color=BOT_COLOR)
         embed.set_footer(text="Variables: {user} {server} {membercount}")
         await interaction.response.send_message(embed=embed)
 
@@ -210,47 +217,25 @@ class SlashCommands(commands.Cog):
     @app_commands.default_permissions(manage_guild=True)
     async def slash_setjoinrole(self, interaction: discord.Interaction, role: discord.Role):
         async with aiosqlite.connect(DB_PATH) as db_conn:
-            await db_conn.execute(
-                "UPDATE guilds SET autorole = ? WHERE guild_id = ?",
-                (role.id, interaction.guild.id)
-            )
+            await db_conn.execute("UPDATE guilds SET autorole = ? WHERE guild_id = ?", (role.id, interaction.guild.id))
             await db_conn.commit()
-        embed = discord.Embed(
-            title="Auto Role Set",
-            description=f"New members will automatically receive {role.mention} when they join.",
-            color=BOT_COLOR
-        )
+        embed = discord.Embed(title="Auto Role Set", description=f"New members will receive {role.mention} on join.", color=BOT_COLOR)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="testwelcome", description="Send a test welcome message to verify your setup")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_testwelcome(self, interaction: discord.Interaction):
         async with aiosqlite.connect(DB_PATH) as db_conn:
-            async with db_conn.execute(
-                "SELECT welcome_channel, welcome_message FROM guilds WHERE guild_id = ?",
-                (interaction.guild.id,)
-            ) as cursor:
+            async with db_conn.execute("SELECT welcome_channel, welcome_message FROM guilds WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
                 row = await cursor.fetchone()
-
         if not row or not row[0]:
-            await interaction.response.send_message(
-                "No welcome message set. Use `/setwelcome` first.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("No welcome message set. Use `/setwelcome` first.", ephemeral=True)
             return
-
         channel = interaction.guild.get_channel(row[0])
         if not channel:
-            await interaction.response.send_message(
-                "Welcome channel not found — it may have been deleted. Use `/setwelcome` to set a new one.",
-                ephemeral=True
-            )
+            await interaction.response.send_message("Welcome channel not found — use `/setwelcome` to set a new one.", ephemeral=True)
             return
-
-        message = row[1].replace("{user}", interaction.user.mention)
-        message = message.replace("{server}", interaction.guild.name)
-        message = message.replace("{membercount}", str(interaction.guild.member_count))
-
+        message = row[1].replace("{user}", interaction.user.mention).replace("{server}", interaction.guild.name).replace("{membercount}", str(interaction.guild.member_count))
         embed = discord.Embed(description=message, color=BOT_COLOR)
         await channel.send(embed=embed)
         await interaction.response.send_message(f"Test welcome sent to {channel.mention}!", ephemeral=True)
@@ -258,11 +243,7 @@ class SlashCommands(commands.Cog):
     # ── Reaction Roles ────────────────────────────────────────
 
     @app_commands.command(name="reactionrole", description="Assign a role to users who react with an emoji on a message")
-    @app_commands.describe(
-        message_id="ID of the message to add the reaction to",
-        emoji="The emoji users react with",
-        role="The role to assign"
-    )
+    @app_commands.describe(message_id="ID of the message", emoji="The emoji users react with", role="The role to assign")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_reactionrole(self, interaction: discord.Interaction, message_id: str, emoji: str, role: discord.Role):
         try:
@@ -270,15 +251,12 @@ class SlashCommands(commands.Cog):
         except ValueError:
             await interaction.response.send_message("Invalid message ID.", ephemeral=True)
             return
-
         async with aiosqlite.connect(DB_PATH) as db_conn:
             await db_conn.execute(
                 "INSERT OR REPLACE INTO reaction_roles (guild_id, message_id, emoji, role_id) VALUES (?, ?, ?, ?)",
                 (interaction.guild.id, msg_id, emoji, role.id)
             )
             await db_conn.commit()
-
-        # Try to add the reaction to the target message
         for channel in interaction.guild.text_channels:
             try:
                 msg = await channel.fetch_message(msg_id)
@@ -286,19 +264,11 @@ class SlashCommands(commands.Cog):
                 break
             except Exception:
                 continue
-
-        embed = discord.Embed(
-            title="Reaction Role Set",
-            description=f"Reacting with {emoji} on message `{msg_id}` will assign {role.mention}.",
-            color=BOT_COLOR
-        )
+        embed = discord.Embed(title="Reaction Role Set", description=f"Reacting with {emoji} on message `{msg_id}` assigns {role.mention}.", color=BOT_COLOR)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="removereactionrole", description="Remove a reaction role from a message")
-    @app_commands.describe(
-        message_id="ID of the message",
-        emoji="The emoji to remove the role assignment from"
-    )
+    @app_commands.describe(message_id="ID of the message", emoji="The emoji to remove")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_removereactionrole(self, interaction: discord.Interaction, message_id: str, emoji: str):
         try:
@@ -306,42 +276,62 @@ class SlashCommands(commands.Cog):
         except ValueError:
             await interaction.response.send_message("Invalid message ID.", ephemeral=True)
             return
-
         async with aiosqlite.connect(DB_PATH) as db_conn:
-            await db_conn.execute(
-                "DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?",
-                (interaction.guild.id, msg_id, emoji)
-            )
+            await db_conn.execute("DELETE FROM reaction_roles WHERE guild_id = ? AND message_id = ? AND emoji = ?", (interaction.guild.id, msg_id, emoji))
             await db_conn.commit()
-
-        embed = discord.Embed(
-            title="Reaction Role Removed",
-            description=f"Removed reaction role for {emoji} on message `{msg_id}`.",
-            color=0x2ECC71
-        )
+        embed = discord.Embed(title="Reaction Role Removed", description=f"Removed reaction role for {emoji} on message `{msg_id}`.", color=0x2ECC71)
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="listreactionroles", description="List all reaction roles set up in this server")
+    @app_commands.command(name="listreactionroles", description="List all reaction roles in this server")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_listreactionroles(self, interaction: discord.Interaction):
         async with aiosqlite.connect(DB_PATH) as db_conn:
-            async with db_conn.execute(
-                "SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id = ?",
-                (interaction.guild.id,)
-            ) as cursor:
+            async with db_conn.execute("SELECT message_id, emoji, role_id FROM reaction_roles WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
                 rows = await cursor.fetchall()
-
         if not rows:
             await interaction.response.send_message("No reaction roles set up.", ephemeral=True)
             return
-
         lines = [f"{r[1]} → <@&{r[2]}> (Message ID: `{r[0]}`)" for r in rows]
-        embed = discord.Embed(
-            title="Reaction Roles",
-            description="\n".join(lines),
-            color=BOT_COLOR
-        )
+        embed = discord.Embed(title="Reaction Roles", description="\n".join(lines), color=BOT_COLOR)
         embed.set_footer(text=f"{len(rows)} reaction role(s)")
+        await interaction.response.send_message(embed=embed)
+
+    # ── Custom Commands ───────────────────────────────────────
+
+    @app_commands.command(name="addcommand", description="Add a custom command for this server")
+    @app_commands.describe(command="The command name (without prefix)", response="What the bot replies with")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_addcommand(self, interaction: discord.Interaction, command: str, response: str):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO custom_commands (guild_id, command, response) VALUES (?, ?, ?)",
+                (interaction.guild.id, command.lower(), response)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="Custom Command Created", description=f"Command `!{command.lower()}` will reply:\n{response}", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="removecommand", description="Remove a custom command from this server")
+    @app_commands.describe(command="The command name to remove")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_removecommand(self, interaction: discord.Interaction, command: str):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("DELETE FROM custom_commands WHERE guild_id = ? AND command = ?", (interaction.guild.id, command.lower()))
+            await db_conn.commit()
+        embed = discord.Embed(title="Custom Command Removed", description=f"Removed `!{command.lower()}`.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="listcommands", description="List all custom commands for this server")
+    async def slash_listcommands(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute("SELECT command FROM custom_commands WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
+                rows = await cursor.fetchall()
+        if not rows:
+            await interaction.response.send_message("No custom commands set up.", ephemeral=True)
+            return
+        commands_list = " ".join([f"`!{r[0]}`" for r in rows])
+        embed = discord.Embed(title="Custom Commands", description=commands_list, color=BOT_COLOR)
+        embed.set_footer(text=f"{len(rows)} command(s)")
         await interaction.response.send_message(embed=embed)
 
     # ── Leveling ──────────────────────────────────────────────
@@ -372,40 +362,54 @@ class SlashCommands(commands.Cog):
         embed = discord.Embed(title=f"{interaction.guild.name} Leaderboard", description="\n".join(lines), color=BOT_COLOR)
         await interaction.response.send_message(embed=embed)
 
-    # ── Giveaway ──────────────────────────────────────────────
+    @app_commands.command(name="setlevelrole", description="Assign a role when members reach a certain level")
+    @app_commands.describe(level="The level at which the role is awarded", role="The role to assign")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setlevelrole(self, interaction: discord.Interaction, level: int, role: discord.Role):
+        await db.add_level_role(interaction.guild.id, level, role.id)
+        embed = discord.Embed(
+            title="Level Role Set",
+            description=f"Members will receive {role.mention} when they reach **level {level}**.",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setlevelchannel", description="Set the channel where level-up messages are sent")
+    @app_commands.describe(channel="The channel for level-up announcements")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setlevelchannel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("UPDATE guilds SET log_channel = ? WHERE guild_id = ?", (channel.id, interaction.guild.id))
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Level-Up Channel Set",
+            description=f"Level-up messages will be sent in {channel.mention}.",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    # ── Giveaways ─────────────────────────────────────────────
 
     @app_commands.command(name="giveaway", description="Start a giveaway")
     @app_commands.describe(duration="Duration (e.g. 1h, 30m, 1d)", winners="Number of winners", prize="What are you giving away?")
     @app_commands.default_permissions(manage_guild=True)
     async def slash_giveaway(self, interaction: discord.Interaction, duration: str, winners: int, prize: str):
         from datetime import datetime, timedelta
-
-        units = {"s": 1, "m": 60, "h": 3600, "d": 86400}
-        try:
-            seconds = int(duration[:-1]) * units[duration[-1].lower()]
-        except Exception:
+        seconds = parse_duration(duration)
+        if seconds == 0:
             await interaction.response.send_message("Invalid duration. Use format like `1h`, `30m`, `1d`.", ephemeral=True)
             return
-
         ends_at = (datetime.utcnow() + timedelta(seconds=seconds)).isoformat()
         end_timestamp = int(datetime.utcnow().timestamp()) + seconds
-
         embed = discord.Embed(
             title=f"GIVEAWAY: {prize}",
-            description=(
-                f"React with 🎉 to enter!\n\n"
-                f"**Winners:** {winners}\n"
-                f"**Ends:** <t:{end_timestamp}:R>\n"
-                f"**Hosted by:** {interaction.user.mention}"
-            ),
+            description=f"React with 🎉 to enter!\n\n**Winners:** {winners}\n**Ends:** <t:{end_timestamp}:R>\n**Hosted by:** {interaction.user.mention}",
             color=0xF1C40F
         )
         embed.set_footer(text="LuxeBot Giveaways")
-
         await interaction.response.send_message(embed=embed)
         msg = await interaction.original_response()
         await msg.add_reaction("🎉")
-
         async with aiosqlite.connect(DB_PATH) as db_conn:
             await db_conn.execute(
                 "INSERT INTO giveaways (guild_id, channel_id, message_id, prize, winners, ends_at, host_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -413,7 +417,254 @@ class SlashCommands(commands.Cog):
             )
             await db_conn.commit()
 
-    # ── Poll ──────────────────────────────────────────────────
+    @app_commands.command(name="gend", description="End a giveaway early")
+    @app_commands.describe(message_id="The message ID of the giveaway to end")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_gend(self, interaction: discord.Interaction, message_id: str):
+        try:
+            msg_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("Invalid message ID.", ephemeral=True)
+            return
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute(
+                "SELECT id, channel_id, prize, winners FROM giveaways WHERE message_id = ? AND guild_id = ? AND ended = 0",
+                (msg_id, interaction.guild.id)
+            ) as cursor:
+                row = await cursor.fetchone()
+        if not row:
+            await interaction.response.send_message("Giveaway not found or already ended.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        giveaway_cog = self.bot.cogs.get("Giveaways")
+        if giveaway_cog:
+            await giveaway_cog.end_giveaway(row[0], row[1], msg_id, row[2], row[3])
+        await interaction.followup.send("Giveaway ended!", ephemeral=True)
+
+    @app_commands.command(name="greroll", description="Reroll the winner of an ended giveaway")
+    @app_commands.describe(message_id="The message ID of the ended giveaway")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_greroll(self, interaction: discord.Interaction, message_id: str):
+        import random
+        try:
+            msg_id = int(message_id)
+        except ValueError:
+            await interaction.response.send_message("Invalid message ID.", ephemeral=True)
+            return
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute(
+                "SELECT channel_id, prize, winners FROM giveaways WHERE message_id = ? AND guild_id = ? AND ended = 1",
+                (msg_id, interaction.guild.id)
+            ) as cursor:
+                row = await cursor.fetchone()
+        if not row:
+            await interaction.response.send_message("Ended giveaway not found.", ephemeral=True)
+            return
+        channel = self.bot.get_channel(row[0])
+        if not channel:
+            await interaction.response.send_message("Channel not found.", ephemeral=True)
+            return
+        await interaction.response.defer()
+        try:
+            msg = await channel.fetch_message(msg_id)
+            reaction = discord.utils.get(msg.reactions, emoji="🎉")
+            if not reaction:
+                await interaction.followup.send("No reactions found on that message.", ephemeral=True)
+                return
+            users = [u async for u in reaction.users() if not u.bot]
+            if not users:
+                await interaction.followup.send("No valid entrants.", ephemeral=True)
+                return
+            new_winners = random.sample(users, min(row[2], len(users)))
+            mentions = ", ".join(w.mention for w in new_winners)
+            await channel.send(f"🎉 New winner(s) for **{row[1]}**: {mentions}!")
+            await interaction.followup.send("Rerolled!", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"Error: {e}", ephemeral=True)
+
+    # ── Tickets ───────────────────────────────────────────────
+
+    @app_commands.command(name="ticketsetup", description="Create the ticket category for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_ticketsetup(self, interaction: discord.Interaction):
+        await interaction.response.defer()
+        category = await interaction.guild.create_category("Tickets")
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO ticket_settings (guild_id, category_id) VALUES (?, ?)",
+                (interaction.guild.id, category.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Ticket System Set Up",
+            description=f"Created **Tickets** category.\nNow run `/ticketpanel` in your desired channel to post the panel.",
+            color=0x2ECC71
+        )
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="ticketpanel", description="Send the ticket panel to a channel")
+    @app_commands.describe(channel="Channel to send the ticket panel in")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_ticketpanel(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        tickets_cog = self.bot.cogs.get("Tickets")
+        if not tickets_cog:
+            await interaction.response.send_message("Tickets cog not loaded.", ephemeral=True)
+            return
+        from cogs.tickets import TicketView
+        embed = discord.Embed(
+            title="Support Tickets",
+            description="Click the button below to open a support ticket.\nOur team will be with you shortly.",
+            color=0x2ECC71
+        )
+        embed.set_footer(text=interaction.guild.name)
+        await channel.send(embed=embed, view=TicketView())
+        embed_conf = discord.Embed(title="Ticket Panel Sent", description=f"Panel posted in {channel.mention}.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed_conf)
+
+    @app_commands.command(name="ticketsetrole", description="Set the support role that can see all tickets")
+    @app_commands.describe(role="The support role")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_ticketsetrole(self, interaction: discord.Interaction, role: discord.Role):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("UPDATE ticket_settings SET support_role = ? WHERE guild_id = ?", (role.id, interaction.guild.id))
+            await db_conn.commit()
+        embed = discord.Embed(title="Support Role Set", description=f"{role.mention} will have access to all tickets.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="ticketsetlogs", description="Set the channel where closed ticket logs are sent")
+    @app_commands.describe(channel="The log channel")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_ticketsetlogs(self, interaction: discord.Interaction, channel: discord.TextChannel):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("UPDATE ticket_settings SET log_channel = ? WHERE guild_id = ?", (channel.id, interaction.guild.id))
+            await db_conn.commit()
+        embed = discord.Embed(title="Ticket Logs Set", description=f"Closed ticket logs will be sent to {channel.mention}.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
+
+    # ── Alerts — YouTube ──────────────────────────────────────
+
+    @app_commands.command(name="youtubealert", description="Add a YouTube channel alert")
+    @app_commands.describe(yt_channel="YouTube channel name or handle (e.g. MrBeast)", discord_channel="Discord channel to post alerts in")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_youtubealert(self, interaction: discord.Interaction, yt_channel: str, discord_channel: discord.TextChannel):
+        yt_channel = yt_channel.strip().replace("https://", "").replace("http://", "").replace("youtube.com/", "").replace("www.", "").replace("@", "").strip("/")
+        await interaction.response.defer()
+        alerts_cog = self.bot.cogs.get("Alerts")
+        channel_id = await alerts_cog.resolve_youtube_channel(yt_channel) if alerts_cog else yt_channel
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO youtube_alerts (guild_id, channel_id, channel_name, discord_channel) VALUES (?, ?, ?, ?)",
+                (interaction.guild.id, channel_id, yt_channel, discord_channel.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="YouTube Alert Added", description=f"I'll post in {discord_channel.mention} when **{yt_channel}** uploads.", color=0xFF0000)
+        await interaction.followup.send(embed=embed)
+
+    @app_commands.command(name="youtubealertremove", description="Remove a YouTube channel alert")
+    @app_commands.describe(yt_channel="YouTube channel name to remove")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_youtubealertremove(self, interaction: discord.Interaction, yt_channel: str):
+        yt_channel = yt_channel.strip().replace("@", "")
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("DELETE FROM youtube_alerts WHERE guild_id = ? AND channel_name = ?", (interaction.guild.id, yt_channel))
+            await db_conn.commit()
+        embed = discord.Embed(title="YouTube Alert Removed", description=f"Removed alert for `{yt_channel}`.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="youtubealertlist", description="List all YouTube alerts for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_youtubealertlist(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute("SELECT channel_name, discord_channel FROM youtube_alerts WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
+                rows = await cursor.fetchall()
+        if not rows:
+            await interaction.response.send_message("No YouTube alerts set up.", ephemeral=True)
+            return
+        lines = [f"**{r[0]}** → <#{r[1]}>" for r in rows]
+        embed = discord.Embed(title="YouTube Alerts", description="\n".join(lines), color=0xFF0000)
+        await interaction.response.send_message(embed=embed)
+
+    # ── Alerts — Twitch ───────────────────────────────────────
+
+    @app_commands.command(name="twitchalert", description="Add a Twitch streamer alert")
+    @app_commands.describe(streamer="Twitch username", discord_channel="Discord channel to post alerts in")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_twitchalert(self, interaction: discord.Interaction, streamer: str, discord_channel: discord.TextChannel):
+        streamer = streamer.lower().strip().replace("@", "")
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO twitch_alerts (guild_id, streamer, discord_channel, last_live) VALUES (?, ?, ?, 0)",
+                (interaction.guild.id, streamer, discord_channel.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="Twitch Alert Added", description=f"I'll post in {discord_channel.mention} when **{streamer}** goes live.", color=0x9146FF)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="twitchalertremove", description="Remove a Twitch streamer alert")
+    @app_commands.describe(streamer="Twitch username to remove")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_twitchalertremove(self, interaction: discord.Interaction, streamer: str):
+        streamer = streamer.lower().strip().replace("@", "")
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("DELETE FROM twitch_alerts WHERE guild_id = ? AND streamer = ?", (interaction.guild.id, streamer))
+            await db_conn.commit()
+        embed = discord.Embed(title="Twitch Alert Removed", description=f"Removed alert for `{streamer}`.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="twitchalertlist", description="List all Twitch alerts for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_twitchalertlist(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute("SELECT streamer, discord_channel FROM twitch_alerts WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
+                rows = await cursor.fetchall()
+        if not rows:
+            await interaction.response.send_message("No Twitch alerts set up.", ephemeral=True)
+            return
+        lines = [f"**{r[0]}** → <#{r[1]}>" for r in rows]
+        embed = discord.Embed(title="Twitch Alerts", description="\n".join(lines), color=0x9146FF)
+        await interaction.response.send_message(embed=embed)
+
+    # ── Alerts — Reddit ───────────────────────────────────────
+
+    @app_commands.command(name="redditalert", description="Add a Reddit subreddit alert")
+    @app_commands.describe(subreddit="Subreddit name (without r/)", discord_channel="Discord channel to post alerts in")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_redditalert(self, interaction: discord.Interaction, subreddit: str, discord_channel: discord.TextChannel):
+        subreddit = subreddit.lower().replace("r/", "").strip()
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO reddit_alerts (guild_id, subreddit, discord_channel) VALUES (?, ?, ?)",
+                (interaction.guild.id, subreddit, discord_channel.id)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="Reddit Alert Added", description=f"I'll post in {discord_channel.mention} when new posts appear in **r/{subreddit}**.", color=0xFF4500)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="redditalertremove", description="Remove a Reddit subreddit alert")
+    @app_commands.describe(subreddit="Subreddit name to remove (without r/)")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_redditalertremove(self, interaction: discord.Interaction, subreddit: str):
+        subreddit = subreddit.lower().replace("r/", "").strip()
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("DELETE FROM reddit_alerts WHERE guild_id = ? AND subreddit = ?", (interaction.guild.id, subreddit))
+            await db_conn.commit()
+        embed = discord.Embed(title="Reddit Alert Removed", description=f"Removed alert for **r/{subreddit}**.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="redditalertlist", description="List all Reddit alerts for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_redditalertlist(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute("SELECT subreddit, discord_channel FROM reddit_alerts WHERE guild_id = ?", (interaction.guild.id,)) as cursor:
+                rows = await cursor.fetchall()
+        if not rows:
+            await interaction.response.send_message("No Reddit alerts set up.", ephemeral=True)
+            return
+        lines = [f"**r/{r[0]}** → <#{r[1]}>" for r in rows]
+        embed = discord.Embed(title="Reddit Alerts", description="\n".join(lines), color=0xFF4500)
+        await interaction.response.send_message(embed=embed)
+
+    # ── Polls ─────────────────────────────────────────────────
 
     @app_commands.command(name="poll", description="Create a yes/no poll")
     @app_commands.describe(question="The poll question")
@@ -424,6 +675,113 @@ class SlashCommands(commands.Cog):
         msg = await interaction.original_response()
         await msg.add_reaction("✅")
         await msg.add_reaction("❌")
+
+    @app_commands.command(name="multipoll", description="Create a poll with multiple options")
+    @app_commands.describe(
+        question="The poll question",
+        option1="Option 1", option2="Option 2",
+        option3="Option 3 (optional)", option4="Option 4 (optional)",
+        option5="Option 5 (optional)", option6="Option 6 (optional)",
+        option7="Option 7 (optional)", option8="Option 8 (optional)",
+        option9="Option 9 (optional)"
+    )
+    async def slash_multipoll(self, interaction: discord.Interaction, question: str, option1: str, option2: str,
+                               option3: str = None, option4: str = None, option5: str = None,
+                               option6: str = None, option7: str = None, option8: str = None, option9: str = None):
+        options = [o for o in [option1, option2, option3, option4, option5, option6, option7, option8, option9] if o]
+        emoji_numbers = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣", "8️⃣", "9️⃣"]
+        description = "\n".join(f"{emoji_numbers[i]} {opt}" for i, opt in enumerate(options))
+        embed = discord.Embed(title=question, description=description, color=0x3498DB)
+        embed.set_footer(text=f"Poll by {interaction.user.display_name}")
+        await interaction.response.send_message(embed=embed)
+        msg = await interaction.original_response()
+        for i in range(len(options)):
+            await msg.add_reaction(emoji_numbers[i])
+
+    # ── Scheduled Messages ────────────────────────────────────
+
+    @app_commands.command(name="schedulesend", description="Schedule a one-time message to be sent later")
+    @app_commands.describe(channel="Channel to send the message in", delay="How long to wait (e.g. 30m, 2h, 1d)", message="The message to send")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_schedulesend(self, interaction: discord.Interaction, channel: discord.TextChannel, delay: str, message: str):
+        from datetime import datetime, timedelta
+        seconds = parse_duration(delay)
+        if seconds == 0:
+            await interaction.response.send_message("Invalid time. Use format like `30m`, `2h`, `1d`.", ephemeral=True)
+            return
+        send_at = (datetime.utcnow() + timedelta(seconds=seconds)).isoformat()
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT INTO scheduled_messages (guild_id, channel_id, message, send_at) VALUES (?, ?, ?, ?)",
+                (interaction.guild.id, channel.id, message, send_at)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="Message Scheduled", description=f"Will send in {channel.mention} in **{delay}**.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="schedulerepeat", description="Schedule a repeating message")
+    @app_commands.describe(channel="Channel to send in", interval="How often to send (e.g. 1h, 6h, 1d)", message="The message to repeat")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_schedulerepeat(self, interaction: discord.Interaction, channel: discord.TextChannel, interval: str, message: str):
+        from datetime import datetime, timedelta
+        seconds = parse_duration(interval)
+        if seconds == 0:
+            await interaction.response.send_message("Invalid interval. Use format like `1h`, `6h`, `1d`.", ephemeral=True)
+            return
+        send_at = (datetime.utcnow() + timedelta(seconds=seconds)).isoformat()
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT INTO scheduled_messages (guild_id, channel_id, message, send_at, repeat_seconds) VALUES (?, ?, ?, ?, ?)",
+                (interaction.guild.id, channel.id, message, send_at, seconds)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(title="Repeating Message Set", description=f"Sending in {channel.mention} every **{interval}**.", color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="schedulelist", description="List all scheduled messages for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_schedulelist(self, interaction: discord.Interaction):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            async with db_conn.execute(
+                "SELECT id, channel_id, message, send_at, repeat_seconds FROM scheduled_messages WHERE guild_id = ? AND sent = 0",
+                (interaction.guild.id,)
+            ) as cursor:
+                rows = await cursor.fetchall()
+        if not rows:
+            await interaction.response.send_message("No scheduled messages.", ephemeral=True)
+            return
+        lines = [f"**ID {r[0]}** → <#{r[1]}> {'🔁 repeating' if r[4] else '📬 one-time'}\n_{r[2][:60]}_" for r in rows]
+        embed = discord.Embed(title="Scheduled Messages", description="\n\n".join(lines), color=BOT_COLOR)
+        embed.set_footer(text=f"{len(rows)} scheduled message(s)")
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="schedulecancel", description="Cancel a scheduled message by its ID")
+    @app_commands.describe(msg_id="The ID of the scheduled message (from /schedulelist)")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_schedulecancel(self, interaction: discord.Interaction, msg_id: int):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute("UPDATE scheduled_messages SET sent = 1 WHERE id = ? AND guild_id = ?", (msg_id, interaction.guild.id))
+            await db_conn.commit()
+        embed = discord.Embed(title="Scheduled Message Cancelled", description=f"Cancelled message **#{msg_id}**.", color=0x2ECC71)
+        await interaction.response.send_message(embed=embed)
+
+    # ── Announcements ─────────────────────────────────────────
+
+    @app_commands.command(name="announce", description="Send an announcement embed to a channel")
+    @app_commands.describe(channel="Channel to announce in", message="The announcement text")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_announce(self, interaction: discord.Interaction, channel: discord.TextChannel, message: str):
+        embed = discord.Embed(description=message, color=BOT_COLOR)
+        embed.set_author(name=interaction.guild.name, icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+        await channel.send(embed=embed)
+        await interaction.response.send_message(f"Announcement sent to {channel.mention}.", ephemeral=True)
+
+    @app_commands.command(name="embed", description="Send a custom embed with a title and description")
+    @app_commands.describe(title="The embed title", description="The embed description")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_embed(self, interaction: discord.Interaction, title: str, description: str):
+        embed = discord.Embed(title=title, description=description, color=BOT_COLOR)
+        await interaction.response.send_message(embed=embed)
 
     # ── Utility ───────────────────────────────────────────────
 
@@ -464,17 +822,9 @@ class SlashCommands(commands.Cog):
     async def slash_premium(self, interaction: discord.Interaction):
         is_prem = await db.is_premium(interaction.guild.id)
         if is_prem:
-            embed = discord.Embed(
-                title="LuxeBot Premium",
-                description="This server has **premium access** active! ✅",
-                color=BOT_COLOR
-            )
+            embed = discord.Embed(title="LuxeBot Premium", description="This server has **premium access** active! ✅", color=BOT_COLOR)
         else:
-            embed = discord.Embed(
-                title="LuxeBot Premium",
-                description="This server does not have premium access.\n\nGet premium for **$5/month**:\nhttps://whop.com/luxebot/luxebot-premium",
-                color=0xFF6B6B
-            )
+            embed = discord.Embed(title="LuxeBot Premium", description="This server does not have premium access.\n\nGet premium for **$5/month**:\nhttps://whop.com/luxebot/luxebot-premium", color=0xFF6B6B)
         await interaction.response.send_message(embed=embed)
 
     @app_commands.command(name="dashboard", description="Get the link to the LuxeBot dashboard")
