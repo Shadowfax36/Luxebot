@@ -837,5 +837,88 @@ class SlashCommands(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
 
+    # ── Vote ──────────────────────────────────────────────────
+
+    @app_commands.command(name="vote", description="Vote for LuxeBot on top.gg and get 2x XP for 12 hours")
+    async def slash_vote(self, interaction: discord.Interaction):
+        import os, aiohttp, aiosqlite
+        from datetime import datetime
+
+        bot_id  = os.getenv("DISCORD_BOT_ID", "")
+        topgg_token = os.getenv("TOPGG_TOKEN", "")
+        vote_url = f"https://top.gg/bot/{bot_id}/vote" if bot_id else "https://top.gg/bot/luxebot/vote"
+        user_id  = interaction.user.id
+
+        # Check if user has an active vote bonus already
+        async with aiosqlite.connect("luxebot.db") as db:
+            async with db.execute(
+                "SELECT expires_at FROM vote_bonuses WHERE user_id = ?", (user_id,)
+            ) as cursor:
+                row = await cursor.fetchone()
+
+        now = datetime.utcnow().isoformat()
+        active_bonus = row and row[0] > now
+
+        # Check top.gg API for recent vote (only if we have a token)
+        has_voted_api = False
+        if topgg_token and bot_id:
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"https://top.gg/api/bots/{bot_id}/check?userId={user_id}",
+                        headers={"Authorization": topgg_token},
+                        timeout=aiohttp.ClientTimeout(total=5)
+                    ) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            has_voted_api = bool(data.get("voted", 0))
+            except Exception:
+                pass  # API unreachable — fall back to DB state
+
+        embed = discord.Embed(title="🗳️ Vote for LuxeBot", color=0xC9A84C)
+        embed.set_footer(text="Votes reset every 12 hours on top.gg")
+
+        if active_bonus:
+            # Already has active bonus from a confirmed vote
+            from datetime import datetime as dt
+            expires = datetime.fromisoformat(row[0])
+            remaining = expires - datetime.utcnow()
+            hours   = int(remaining.total_seconds() // 3600)
+            minutes = int((remaining.total_seconds() % 3600) // 60)
+            embed.description = (
+                f"✅ **You already voted!** Your 2x XP bonus is active.\n\n"
+                f"⏱️ Expires in: **{hours}h {minutes}m**\n\n"
+                f"Vote again after your bonus expires:\n{vote_url}"
+            )
+            embed.color = 0x4ade80
+        elif has_voted_api:
+            # Voted via API check but bonus not yet in DB (edge case)
+            async with aiosqlite.connect("luxebot.db") as db:
+                expires_at = (datetime.utcnow() + __import__("datetime").timedelta(hours=12)).isoformat()
+                await db.execute(
+                    "INSERT OR REPLACE INTO vote_bonuses (user_id, expires_at) VALUES (?, ?)",
+                    (user_id, expires_at)
+                )
+                await db.commit()
+            embed.description = (
+                f"✅ **Thank you for voting!** 2x XP is now active for **12 hours**.\n\n"
+                f"Your vote helps LuxeBot reach more servers 🚀\n\n"
+                f"[Vote again in 12 hours]({vote_url})"
+            )
+            embed.color = 0x4ade80
+        else:
+            embed.description = (
+                f"**Voting takes 10 seconds and gives you 2x XP for 12 hours!**\n\n"
+                f"🔗 [Click here to vote]({vote_url})\n\n"
+                f"**Rewards:**\n"
+                f"• 🌟 2x XP on all messages for 12 hours\n"
+                f"• 🎤 2x Voice XP for 12 hours\n"
+                f"• Stacks with streak, booster, and weekend bonuses\n\n"
+                f"Your bonus is applied automatically when the vote is confirmed."
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 async def setup(bot):
     await bot.add_cog(SlashCommands(bot))
