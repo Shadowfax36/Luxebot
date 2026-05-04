@@ -1020,5 +1020,60 @@ class SlashCommands(commands.Cog):
         await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
+    # ── Owner: grant premium ──────────────────────────────────
+
+    @app_commands.command(name="grantpremium", description="Grant premium to a server (owner only)")
+    @app_commands.describe(
+        guild_id="The server ID to grant premium to (leave blank for this server)",
+        days="Number of days (leave blank for lifetime)"
+    )
+    async def slash_grantpremium(self, interaction: discord.Interaction,
+                                  guild_id: str = None, days: int = None):
+        OWNER_ID = "1196910040364372028"
+        if str(interaction.user.id) != OWNER_ID:
+            await interaction.response.send_message(
+                "❌ This command is restricted to the bot owner.",
+                ephemeral=True
+            )
+            return
+
+        import aiosqlite
+        from datetime import datetime, timedelta
+
+        target_id = int(guild_id) if guild_id else interaction.guild.id
+
+        if days and days > 0:
+            expires = (datetime.utcnow() + timedelta(days=days)).isoformat()
+            expiry_label = f"{days} day{'s' if days != 1 else ''}"
+        else:
+            expires = "9999-12-31"
+            expiry_label = "lifetime"
+
+        async with aiosqlite.connect("luxebot.db") as db:
+            await db.execute(
+                "INSERT OR REPLACE INTO premium_servers (guild_id, expires_at) VALUES (?, ?)",
+                (target_id, expires)
+            )
+            await db.commit()
+
+        # Bust Redis cache if available
+        try:
+            from cache import invalidate_premium
+            await invalidate_premium(target_id)
+        except Exception:
+            pass
+
+        embed = discord.Embed(
+            title="👑 Premium Granted",
+            description=(
+                f"**Server ID:** `{target_id}`\n"
+                f"**Duration:** {expiry_label}\n"
+                f"**Expires:** {'Never' if expires == '9999-12-31' else expires[:10]}"
+            ),
+            color=0xC9A84C
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
 async def setup(bot):
     await bot.add_cog(SlashCommands(bot))
