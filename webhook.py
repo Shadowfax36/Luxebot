@@ -32,6 +32,7 @@ DISCORD_CLIENT_ID     = os.getenv("DISCORD_CLIENT_ID", "")
 DISCORD_CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET", "")
 DISCORD_REDIRECT_URI  = os.getenv("DISCORD_REDIRECT_URI", "http://localhost:5000/callback")
 API_SECRET            = os.getenv("DASHBOARD_SECRET", "luxebot123")
+OWNER_ID             = "1196910040364372028"  # Bryce — only user who can grant premium
 WHOP_SECRET           = os.getenv("WHOP_WEBHOOK_SECRET", "luxebot_secret_123")
 DISCORD_API           = "https://discord.com/api/v10"
 BOT_TOKEN = os.getenv("DISCORD_TOKEN", "")
@@ -737,8 +738,6 @@ footer a{color:var(--gold)}
     {% if user %}
       <a href="/servers" class="btn btn-gold">My Servers</a>
       <a href="/logout" class="btn btn-outline">Logout</a>
-    {% else %}
-      <a href="/login" class="btn btn-gold">Login with Discord</a>
     {% endif %}
   </div>
 </nav>
@@ -749,13 +748,11 @@ footer a{color:var(--gold)}
   <h1 class="hero-title">The Bot Your<br>Server <span class="gold">Deserves</span></h1>
   <p class="hero-sub">Moderation, leveling, giveaways, tickets, YouTube, Twitch &amp; Reddit alerts — all for $5/month.</p>
   <div class="hero-btns">
-    {% if user %}
-      <a href="/servers" class="btn btn-gold" style="padding:13px 30px;font-size:.95rem">Manage Servers</a>
-    {% else %}
-      <a href="/login" class="btn btn-gold" style="padding:13px 30px;font-size:.95rem">Login with Discord</a>
-    {% endif %}
     <a href="https://whop.com/luxebot/luxebot-premium" target="_blank"
-       class="btn btn-ghost" style="padding:13px 30px;font-size:.95rem">Get Premium — $5/mo</a>
+       class="btn btn-gold" style="padding:13px 30px;font-size:1rem">👑 Get Premium — $5/month</a>
+    {% if user %}
+      <a href="/servers" class="btn btn-ghost" style="padding:13px 30px;font-size:.95rem">Manage My Servers</a>
+    {% endif %}
   </div>
 </section>
 <section class="features">
@@ -1637,6 +1634,131 @@ def topgg_webhook():
 
     return jsonify({"status": "ok", "user": uid, "duration": duration_str}), 200
 
+
+# ── Admin: grant premium ──────────────────────────────────────────────────────
+
+@app.route("/admin/grant-premium", methods=["GET", "POST"])
+@login_required
+def admin_grant_premium():
+    """
+    Hidden admin route — only accessible by the bot owner (Bryce).
+    GET  → show form
+    POST → grant premium to a guild_id with optional expiry
+    """
+    user = session.get("user", {})
+    if str(user.get("id", "")) != OWNER_ID:
+        # Return a generic 404 so the route isn't discoverable
+        from flask import abort
+        abort(404)
+
+    message = None
+    error   = None
+
+    if request.method == "POST":
+        guild_id_raw = request.form.get("guild_id", "").strip()
+        days_raw     = request.form.get("days", "").strip()
+        action       = request.form.get("action", "grant")
+
+        try:
+            guild_id = int(guild_id_raw)
+        except (ValueError, TypeError):
+            error = "Invalid guild ID."
+            guild_id = None
+
+        if guild_id and action == "grant":
+            async def _grant():
+                from datetime import datetime, timedelta
+                async with aiosqlite.connect(DB_PATH) as db:
+                    if days_raw and days_raw.isdigit():
+                        expires = (datetime.utcnow() + timedelta(days=int(days_raw))).isoformat()
+                    else:
+                        expires = "9999-12-31"
+                    await db.execute(
+                        "INSERT OR REPLACE INTO premium_servers (guild_id, expires_at) VALUES (?, ?)",
+                        (guild_id, expires)
+                    )
+                    await db.commit()
+            run_async(_grant())
+            # Bust Redis premium cache
+            try:
+                run_async(__import__("cache").invalidate_premium(guild_id))
+            except Exception:
+                pass
+            expiry_label = f"{days_raw} days" if days_raw and days_raw.isdigit() else "lifetime"
+            message = f"✅ Premium granted to guild {guild_id} ({expiry_label})."
+
+        elif guild_id and action == "revoke":
+            async def _revoke():
+                async with aiosqlite.connect(DB_PATH) as db:
+                    await db.execute("DELETE FROM premium_servers WHERE guild_id = ?", (guild_id,))
+                    await db.commit()
+            run_async(_revoke())
+            try:
+                run_async(__import__("cache").invalidate_premium(guild_id))
+            except Exception:
+                pass
+            message = f"🗑️ Premium revoked for guild {guild_id}."
+
+    # Fetch current premium list
+    async def _list():
+        async with aiosqlite.connect(DB_PATH) as db:
+            async with db.execute(
+                "SELECT guild_id, expires_at, trial_expires_at FROM premium_servers ORDER BY expires_at DESC"
+            ) as cursor:
+                return await cursor.fetchall()
+    premium_list = run_async(_list())
+
+    html = BASE_CSS + f"""
+<title>LuxeBot Admin</title>
+<body>
+<nav class="topnav">
+  <div class="logo">LUXE<span>BOT</span> <span style="font-size:.9rem;color:var(--muted2)">ADMIN</span></div>
+  <a href="/logout" class="btn btn-ghost btn-sm">Logout</a>
+</nav>
+<div style="max-width:700px;margin:40px auto;padding:0 24px;position:relative;z-index:1">
+  <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;letter-spacing:2px;margin-bottom:24px">
+    Grant Premium Access
+  </h2>
+
+  {"<div class='alert alert-info'>" + message + "</div>" if message else ""}
+  {"<div class='alert' style='background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:#ef4444'>" + error + "</div>" if error else ""}
+
+  <div class="card">
+    <div class="card-title">➕ Grant / Revoke Premium</div>
+    <form method="POST">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="lbl">Guild ID</label>
+          <input class="input" name="guild_id" placeholder="Discord server ID" required>
+        </div>
+        <div class="form-group">
+          <label class="lbl">Days (blank = lifetime)</label>
+          <input class="input" name="days" placeholder="e.g. 30 — or leave blank">
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button class="btn btn-gold" name="action" value="grant">Grant Premium</button>
+        <button class="btn btn-danger" name="action" value="revoke">Revoke Premium</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📋 Current Premium Servers ({len(premium_list)})</div>
+    {"<div class='empty'><div class='ico'>💎</div>No premium servers yet</div>" if not premium_list else ""}
+    {"".join(
+      f"<div style='display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--dark4);font-size:.85rem'>"
+      f"<span style='color:var(--text)'>{r[0]}</span>"
+      f"<span style='color:var(--muted2)'>{('Lifetime' if r[1] == '9999-12-31' else r[1][:10]) if r[1] else ''}"
+      f"{'  (trial: ' + r[2][:10] + ')' if r[2] else ''}</span>"
+      f"</div>"
+      for r in premium_list
+    )}
+  </div>
+</div>
+</body>
+"""
+    return html
 
 # ── Health ────────────────────────────────────────────────────────────────────
 
