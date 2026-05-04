@@ -642,11 +642,11 @@ async function refreshPickers() {
     if (chResp.ok) window.GUILD_CHANNELS = await chResp.json();
     if (roResp.ok) window.GUILD_ROLES    = await roResp.json();
     // Re-build all pickers
-    document.querySelectorAll("select[data-picker=\"channel\"]").forEach(sel => {
+    document.querySelectorAll('select[data-picker="channel"]').forEach(sel => {
       const cur = sel.value || sel.dataset.current;
       buildChannelSelect(sel, window.GUILD_CHANNELS, cur);
     });
-    document.querySelectorAll("select[data-picker=\"role\"]").forEach(sel => {
+    document.querySelectorAll('select[data-picker="role"]').forEach(sel => {
       const cur = sel.value || sel.dataset.current;
       buildRoleSelect(sel, window.GUILD_ROLES, cur);
     });
@@ -1041,7 +1041,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
       {% for w in s.badwords %}
       <div class="tag">
         <span>{{w}}</span>
-        <span class="del" onclick="quickAction('automod',{badword_remove:'{{w}}'})">✕</span>
+        <span class="del" onclick="quickAction('automod',{badword_remove:{{w|tojson}}})">✕</span>
       </div>
       {% endfor %}
     </div>
@@ -1105,7 +1105,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <tr>
           <td><span class="pill">Level {{lr.level}}</span></td>
           <td style="color:var(--muted2)">{{lr.role_id}}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="quickAction('leveling',{level_role_remove:'{{lr.level}}'})">Remove</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="quickAction('leveling',{level_role_remove:{{lr.level|tojson}}})">Remove</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -1178,7 +1178,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <tr>
           <td>{{a.channel}}</td>
           <td style="color:var(--muted2)">#{{a.discord_channel}}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{yt_remove:'{{a.channel}}'})">Remove</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{yt_remove:{{a.channel|tojson}}})">Remove</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -1202,7 +1202,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <tr>
           <td>{{a.streamer}}</td>
           <td style="color:var(--muted2)">#{{a.discord_channel}}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{twitch_remove:'{{a.streamer}}'})">Remove</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{twitch_remove:{{a.streamer|tojson}}})">Remove</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -1226,7 +1226,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <tr>
           <td>r/{{a.subreddit}}</td>
           <td style="color:var(--muted2)">#{{a.discord_channel}}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{reddit_remove:'{{a.subreddit}}'})">Remove</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="quickAction('alerts',{reddit_remove:{{a.subreddit|tojson}}})">Remove</button></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -1274,7 +1274,7 @@ DASHBOARD_HTML = """<!DOCTYPE html>
         <tr>
           <td><code class="cmd">!{{cmd.command}}</code></td>
           <td style="color:var(--muted2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{cmd.response}}</td>
-          <td><button class="btn btn-danger btn-sm" onclick="quickAction('commands',{cmd_remove:'{{cmd.command}}'})">Remove</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="quickAction('commands',{cmd_remove:{{cmd.command|tojson}}})">Remove</button></td>
         </tr>
         {% endfor %}
       </tbody>
