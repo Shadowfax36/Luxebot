@@ -388,6 +388,107 @@ class SlashCommands(commands.Cog):
         )
         await interaction.response.send_message(embed=embed)
 
+    @app_commands.command(name="setxpmultiplier", description="Set an XP multiplier for a specific channel")
+    @app_commands.describe(channel="The channel to boost", multiplier="e.g. 2.0 for double XP")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setxpmultiplier(self, interaction: discord.Interaction, channel: discord.TextChannel, multiplier: float):
+        if multiplier < 0.1 or multiplier > 10.0:
+            await interaction.response.send_message("Multiplier must be between 0.1 and 10.0.", ephemeral=True)
+            return
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO xp_multipliers (guild_id, channel_id, multiplier) VALUES (?, ?, ?)",
+                (interaction.guild.id, channel.id, multiplier)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="XP Multiplier Set",
+            description=f"{channel.mention} now gives **{multiplier}x** XP per message.",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="setlevelmessage", description="Set a custom announcement for a specific level")
+    @app_commands.describe(level="The level to customise", message="Use {user} and {level} as variables")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_setlevelmessage(self, interaction: discord.Interaction, level: int, message: str):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "INSERT OR REPLACE INTO level_milestones (guild_id, level, message) VALUES (?, ?, ?)",
+                (interaction.guild.id, level, message)
+            )
+            await db_conn.commit()
+        embed = discord.Embed(
+            title="Level Milestone Set",
+            description=f"Custom message at **level {level}**:\n{message}",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="givexp", description="Grant XP to a member")
+    @app_commands.describe(member="The member to award", amount="Amount of XP to grant")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_givexp(self, interaction: discord.Interaction, member: discord.Member, amount: int):
+        if amount < 1 or amount > 100000:
+            await interaction.response.send_message("Amount must be between 1 and 100,000.", ephemeral=True)
+            return
+        await db.add_xp(interaction.guild.id, member.id, amount)
+        xp, level = await db.get_xp(interaction.guild.id, member.id)
+        embed = discord.Embed(
+            title="XP Granted",
+            description=f"Gave **{amount:,} XP** to {member.mention}.\nThey now have **{xp:,} XP** (Level {level}).",
+            color=BOT_COLOR
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="resetxp", description="Reset a member's XP to zero")
+    @app_commands.describe(member="The member to reset")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_resetxp(self, interaction: discord.Interaction, member: discord.Member):
+        async with aiosqlite.connect(DB_PATH) as db_conn:
+            await db_conn.execute(
+                "DELETE FROM levels WHERE guild_id = ? AND user_id = ?",
+                (interaction.guild.id, member.id)
+            )
+            await db_conn.commit()
+        try:
+            from cache import invalidate_xp
+            await invalidate_xp(interaction.guild.id, member.id)
+        except Exception:
+            pass
+        embed = discord.Embed(
+            title="XP Reset",
+            description=f"Reset all XP for {member.mention}.",
+            color=0x95A5A6
+        )
+        await interaction.response.send_message(embed=embed)
+
+    @app_commands.command(name="aimod", description="Check AI moderation status for this server")
+    @app_commands.default_permissions(manage_guild=True)
+    async def slash_aimod(self, interaction: discord.Interaction):
+        ai_cog = self.bot.cogs.get("AIModerator")
+        ai_on  = bool(ai_cog and ai_cog.client)
+        # _ai_call_times is module-level in ai_moderation.py
+        try:
+            from cogs.ai_moderation import _ai_call_times
+            call_count = len(_ai_call_times)
+        except Exception:
+            call_count = 0
+        embed = discord.Embed(
+            title="🤖 AI Moderation Status",
+            color=BOT_COLOR if ai_on else 0x95A5A6
+        )
+        embed.add_field(name="Status",            value="✅ Active" if ai_on else "⚠️ Rule-based only (set ANTHROPIC_API_KEY)", inline=False)
+        embed.add_field(name="Model",             value="claude-haiku-3-5" if ai_on else "N/A", inline=True)
+        embed.add_field(name="API Calls (60s)",   value=str(call_count), inline=True)
+        embed.add_field(name="Rate Limit",        value="20/min", inline=True)
+        embed.add_field(
+            name="Catches",
+            value="• Toxicity & hate speech\n• Leet-speak evasion\n• Mass mentions\n• Invite spam\n• Raid detection\n• Suspicious new accounts",
+            inline=False
+        )
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     # ── Giveaways ─────────────────────────────────────────────
 
     @app_commands.command(name="giveaway", description="Start a giveaway")
@@ -842,7 +943,7 @@ class SlashCommands(commands.Cog):
     @app_commands.command(name="vote", description="Vote for LuxeBot on top.gg and get 2x XP for 12 hours")
     async def slash_vote(self, interaction: discord.Interaction):
         import os, aiohttp, aiosqlite
-        from datetime import datetime
+        from datetime import datetime, timedelta
 
         bot_id  = os.getenv("DISCORD_BOT_ID", "")
         topgg_token = os.getenv("TOPGG_TOKEN", "")
@@ -880,7 +981,6 @@ class SlashCommands(commands.Cog):
 
         if active_bonus:
             # Already has active bonus from a confirmed vote
-            from datetime import datetime as dt
             expires = datetime.fromisoformat(row[0])
             remaining = expires - datetime.utcnow()
             hours   = int(remaining.total_seconds() // 3600)
@@ -894,7 +994,7 @@ class SlashCommands(commands.Cog):
         elif has_voted_api:
             # Voted via API check but bonus not yet in DB (edge case)
             async with aiosqlite.connect("luxebot.db") as db:
-                expires_at = (datetime.utcnow() + __import__("datetime").timedelta(hours=12)).isoformat()
+                expires_at = (datetime.utcnow() + timedelta(hours=12)).isoformat()
                 await db.execute(
                     "INSERT OR REPLACE INTO vote_bonuses (user_id, expires_at) VALUES (?, ?)",
                     (user_id, expires_at)
