@@ -834,7 +834,12 @@ SERVERS_HTML = BASE_CSS + """
 </body>
 """
 
-DASHBOARD_HTML = BASE_CSS + BASE_JS + """
+DASHBOARD_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+""" + BASE_CSS + BASE_JS + """
 <title>{{guild.name}} — LuxeBot</title>
 <style>
 .section{display:none}.section.active{display:block}
@@ -842,31 +847,8 @@ DASHBOARD_HTML = BASE_CSS + BASE_JS + """
 .rr-row:last-child{border-bottom:none}
 .pill{background:var(--dark3);padding:3px 10px;border-radius:12px;font-size:.78rem}
 </style>
+</head>
 <body>
-<script>window.SAVE_URL = '/dashboard/{{guild_id}}/save';</script>
-<script>
-// Pre-loaded guild data from server
-window.GUILD_CHANNELS = {{ channels | tojson }};
-window.GUILD_ROLES    = {{ roles | tojson }};
-
-// Init all pickers when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('select[data-picker="channel"]').forEach(sel => {
-    buildChannelSelect(sel, window.GUILD_CHANNELS, sel.dataset.current);
-  });
-  document.querySelectorAll('select[data-picker="role"]').forEach(sel => {
-    buildRoleSelect(sel, window.GUILD_ROLES, sel.dataset.current);
-  });
-  // Show manual inputs for any picker that has no options loaded
-  document.querySelectorAll('select[data-picker]').forEach(sel => {
-    if (sel.options.length <= 1 && sel.dataset.fallback) {
-      const fb = document.getElementById(sel.dataset.fallback);
-      if (fb) fb.classList.add('show');
-    }
-  });
-});
-</script>
-<div class="layout">
 
 <!-- SIDEBAR -->
 <div class="sidebar" id="sidebar">
@@ -1309,7 +1291,25 @@ document.addEventListener('DOMContentLoaded', () => {
 </div><!-- end main-content -->
 </div><!-- end layout -->
 <div class="toast" id="toast"></div>
+<script>
+window.SAVE_URL = '/dashboard/{{guild_id}}/save';
+window.GUILD_CHANNELS = {{ channels | tojson }};
+window.GUILD_ROLES = {{ roles | tojson }};
+document.querySelectorAll('select[data-picker="channel"]').forEach(function(sel) {
+  buildChannelSelect(sel, window.GUILD_CHANNELS, sel.dataset.current);
+});
+document.querySelectorAll('select[data-picker="role"]').forEach(function(sel) {
+  buildRoleSelect(sel, window.GUILD_ROLES, sel.dataset.current);
+});
+document.querySelectorAll('select[data-picker]').forEach(function(sel) {
+  if (sel.options.length <= 1 && sel.dataset.fallback) {
+    var fb = document.getElementById(sel.dataset.fallback);
+    if (fb) fb.classList.add('show');
+  }
+});
+</script>
 </body>
+</html>
 """
 
 
