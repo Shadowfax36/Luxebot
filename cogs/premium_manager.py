@@ -12,10 +12,37 @@ WHOP_URL  = "https://whop.com/luxebot/luxebot-premium"
 class PremiumManager(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.check_expired_trials.start()
+        # Run migration first, then start the task once it's safe
+        self.bot.loop.create_task(self._init())
 
     def cog_unload(self):
         self.check_expired_trials.cancel()
+
+    # ── Startup: migrate then start task ─────────────────────────────────────
+
+    async def _init(self):
+        """
+        Ensure the notified_trial_expire column exists before the expiry
+        check task starts. ALTER TABLE is idempotent via try/except.
+        """
+        await self.bot.wait_until_ready()
+        await self._migrate()
+        if not self.check_expired_trials.is_running():
+            self.check_expired_trials.start()
+
+    async def _migrate(self):
+        """Add notified_trial_expire column if it doesn't exist yet."""
+        try:
+            async with aiosqlite.connect(DB_PATH) as db_conn:
+                await db_conn.execute(
+                    "ALTER TABLE premium_servers "
+                    "ADD COLUMN notified_trial_expire INTEGER DEFAULT 0"
+                )
+                await db_conn.commit()
+                print("[PremiumManager] Migration: notified_trial_expire column added")
+        except Exception:
+            # Column already exists — this is the normal case after first run
+            pass
 
     # ── Hourly expiry check ───────────────────────────────────────────────────
 
@@ -26,8 +53,8 @@ class PremiumManager(commands.Cog):
         sends a channel message AND a DM to the server owner, then marks as notified.
         Does NOT delete rows — is_premium() handles expiry via timestamp comparison.
         """
-        now          = datetime.utcnow()
-        now_iso      = now.isoformat()
+        now           = datetime.utcnow()
+        now_iso       = now.isoformat()
         two_hours_ago = (now - timedelta(hours=2)).isoformat()
 
         async with aiosqlite.connect(DB_PATH) as db_conn:
@@ -37,7 +64,7 @@ class PremiumManager(commands.Cog):
                    AND trial_expires_at <= ?
                    AND trial_expires_at >= ?
                    AND (expires_at IS NULL OR expires_at <= ?)
-                   AND notified_trial_expire IS NULL""",
+                   AND (notified_trial_expire IS NULL OR notified_trial_expire = 0)""",
                 (now_iso, two_hours_ago, now_iso)
             ) as cursor:
                 expired = await cursor.fetchall()
@@ -45,11 +72,17 @@ class PremiumManager(commands.Cog):
             for guild_id, trial_expires_at in expired:
                 await self._notify_expiry(guild_id)
                 await db_conn.execute(
-                    "UPDATE premium_servers SET notified_trial_expire = ? WHERE guild_id = ?",
-                    (now_iso, guild_id)
+                    "UPDATE premium_servers SET notified_trial_expire = 1 WHERE guild_id = ?",
+                    (guild_id,)
                 )
 
             await db_conn.commit()
+
+    @check_expired_trials.before_loop
+    async def before_check(self):
+        await self.bot.wait_until_ready()
+
+    # ── Expiry notifications ──────────────────────────────────────────────────
 
     async def _notify_expiry(self, guild_id: int):
         """Send channel alert + DM to server owner when trial expires."""
@@ -70,7 +103,6 @@ class PremiumManager(commands.Cog):
         )
         channel_embed.set_footer(text=f"LuxeBot Premium • {WHOP_URL}")
 
-        # Post in first writable text channel
         for channel in guild.text_channels:
             if channel.permissions_for(guild.me).send_messages:
                 try:
@@ -79,7 +111,6 @@ class PremiumManager(commands.Cog):
                     pass
                 break
 
-        # DM the server owner
         await self._dm_owner(guild)
 
     async def _dm_owner(self, guild: discord.Guild):
@@ -131,28 +162,9 @@ class PremiumManager(commands.Cog):
             await owner.send(embed=dm_embed)
             print(f"[PremiumManager] DM sent to owner {owner} of {guild.name} ({guild.id})")
         except discord.Forbidden:
-            # Owner has DMs disabled — log and move on
             print(f"[PremiumManager] Could not DM owner of {guild.name} ({guild.id}) — DMs disabled")
         except Exception as e:
             print(f"[PremiumManager] DM error for {guild.name}: {e}")
-
-    @check_expired_trials.before_loop
-    async def before_check(self):
-        await self.bot.wait_until_ready()
-
-    # ── Ensure schema columns exist ───────────────────────────────────────────
-
-    @commands.Cog.listener()
-    async def on_ready(self):
-        """Add notified_trial_expire column if it doesn't exist yet (safe migration)."""
-        try:
-            async with aiosqlite.connect(DB_PATH) as db_conn:
-                await db_conn.execute(
-                    "ALTER TABLE premium_servers ADD COLUMN notified_trial_expire TEXT"
-                )
-                await db_conn.commit()
-        except Exception:
-            pass  # Column already exists — expected on subsequent starts
 
 
 async def setup(bot):
