@@ -256,14 +256,22 @@ def db_get_guild(guild_id: int) -> dict:
 
     row, am, prem, tickets, level_roles, yt, twitch, reddit, badwords, custom_cmds, rr, top_members, warn_count = run_async(_fetch())
 
-    now = datetime.utcnow().isoformat()
-    is_premium = False
-    is_trial = False
+    now     = datetime.utcnow()
+    now_iso = now.isoformat()
+    is_premium     = False
+    is_trial       = False
+    trial_days_left = 0
     if prem:
-        if prem[0] and prem[0] > now:
+        if prem[0] and prem[0] > now_iso:
             is_premium = True
-        if prem[1] and prem[1] > now:
+        if prem[1] and prem[1] > now_iso:
             is_trial = True
+            try:
+                exp   = datetime.fromisoformat(prem[1])
+                delta = exp - now
+                trial_days_left = max(0, int(delta.total_seconds() // 86400))
+            except Exception:
+                trial_days_left = 0
 
     return {
         "guild_id":       guild_id,
@@ -296,7 +304,8 @@ def db_get_guild(guild_id: int) -> dict:
         "warn_count":     warn_count,
         "is_premium":     is_premium,
         "is_trial":       is_trial,
-        "alert_count":    len(yt) + len(twitch) + len(reddit),
+                "alert_count":    len(yt) + len(twitch) + len(reddit),
+        "trial_days_left": trial_days_left,
     }
 
 
@@ -890,9 +899,9 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     {% if s.is_premium %}
       <span class="badge badge-gold">👑 Premium</span>
     {% elif s.is_trial %}
-      <span class="badge badge-green">✅ Trial Active</span>
+      <span class="badge badge-green">🕐 Trial — {{s.trial_days_left}}d left</span>
     {% else %}
-      <span class="badge badge-muted">Free</span>
+      <span class="badge badge-muted" style="color:#ef4444;border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.08)">⏰ Trial Expired</span>
     {% endif %}
   </div>
   <div class="stats-grid">
@@ -901,11 +910,17 @@ DASHBOARD_HTML = """<!DOCTYPE html>
     <div class="stat"><div class="stat-val">{{s.alert_count}}</div><div class="stat-lbl">Active Alerts</div></div>
     <div class="stat"><div class="stat-val">{{s.custom_commands|length}}</div><div class="stat-lbl">Custom Commands</div></div>
   </div>
-  {% if not s.is_premium %}
+  {% if not s.is_premium and not s.is_trial %}
+  <div class="card" style="border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.04)">
+    <div class="card-title" style="color:#ef4444">⏰ Trial Expired</div>
+    <p style="color:var(--muted2);font-size:.875rem;margin-bottom:16px">Your 7-day free trial has ended. Subscribe to restore all features.</p>
+    <a href="https://whop.com/luxebot/luxebot-premium" target="_blank" class="btn btn-gold">Subscribe — $5/month</a>
+  </div>
+  {% elif s.is_trial %}
   <div class="card" style="border-color:var(--gold-dim)">
-    <div class="card-title">👑 Upgrade to Premium</div>
-    <p style="color:var(--muted2);font-size:.875rem;margin-bottom:16px">Keep all features for <strong>$5/month</strong>. No feature locks, no upsells.</p>
-    <a href="https://whop.com/luxebot/luxebot-premium" target="_blank" class="btn btn-gold">Get Premium — $5/mo</a>
+    <div class="card-title">👑 {{s.trial_days_left}} day{% if s.trial_days_left != 1 %}s{% endif %} left in your free trial</div>
+    <p style="color:var(--muted2);font-size:.875rem;margin-bottom:16px">Subscribe now to keep all features after your trial ends. <strong>$5/month</strong> — no feature locks, no upsells.</p>
+    <a href="https://whop.com/luxebot/luxebot-premium" target="_blank" class="btn btn-gold">Subscribe — $5/month</a>
   </div>
   {% endif %}
   <div class="card">
@@ -1490,42 +1505,130 @@ def api_cache_stats():
 
 # ── Routes — Whop Webhook ─────────────────────────────────────────────────────
 
+def _verify_whop_signature(raw_body: bytes, secret: str) -> bool:
+    """
+    Verify Whop's webhook HMAC-SHA256 signature.
+
+    Whop signs requests with:
+      X-Whop-Signature: sha256=<hex_digest>
+
+    The signature is computed over the raw request body using the
+    WHOP_WEBHOOK_SECRET as the key.
+
+    Returns True if valid (or if no secret is configured — for dev/testing).
+    Returns False if the signature is present but doesn't match.
+    """
+    import hmac as _hmac
+    import hashlib as _hashlib
+
+    if not secret:
+        # No secret configured — accept all (dev mode). Log a warning.
+        print("[Whop] WARNING: WHOP_WEBHOOK_SECRET not set — skipping signature verification")
+        return True
+
+    sig_header = request.headers.get("X-Whop-Signature", "")
+    if not sig_header:
+        # Whop may also send X-Whop-Webhook-Secret (older API versions)
+        # Fall back to a simple token comparison
+        token_header = request.headers.get("X-Whop-Webhook-Secret", "")
+        if token_header:
+            return _hmac.compare_digest(token_header, secret)
+        print("[Whop] No signature header present — rejecting")
+        return False
+
+    # Extract hex digest from "sha256=<hex>" format
+    if sig_header.startswith("sha256="):
+        provided_hex = sig_header[7:]
+    else:
+        provided_hex = sig_header
+
+    expected = _hmac.new(
+        secret.encode("utf-8"),
+        raw_body,
+        _hashlib.sha256
+    ).hexdigest()
+
+    valid = _hmac.compare_digest(provided_hex, expected)
+    if not valid:
+        print(f"[Whop] Signature mismatch — provided: {provided_hex[:16]}... expected: {expected[:16]}...")
+    return valid
+
+
 @app.route("/webhook/whop", methods=["POST"])
 def whop_webhook():
-    data = request.json or {}
-    event = data.get("event", "")
-    metadata = data.get("data", {}).get("metadata", {})
+    # ── 1. Verify signature before reading any data ───────────────────────────
+    raw_body = request.get_data()  # Read raw bytes before json parsing
+    if not _verify_whop_signature(raw_body, WHOP_SECRET):
+        print("[Whop] Rejected — invalid signature")
+        return jsonify({"error": "invalid signature"}), 401
+
+    # ── 2. Parse payload ──────────────────────────────────────────────────────
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    event        = data.get("event", "")
+    payload_data = data.get("data", {})
+    metadata     = payload_data.get("metadata", {})
     guild_id_raw = metadata.get("guild_id")
 
+    print(f"[Whop] Event: {event} | guild_id: {guild_id_raw}")
+
     if not guild_id_raw:
-        return jsonify({"status": "no guild_id"}), 200
+        return jsonify({"status": "no guild_id in metadata"}), 200
+
     try:
         guild_id = int(guild_id_raw)
     except (ValueError, TypeError):
         return jsonify({"status": "invalid guild_id"}), 200
 
-    async def _add():
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute(
-                "INSERT OR REPLACE INTO premium_servers (guild_id, expires_at) VALUES (?, '9999-12-31')",
-                (guild_id,)
-            )
-            await db.commit()
+    # ── 3. Validate membership data is consistent ─────────────────────────────
+    # Whop sends the full membership object in data — use it to double-check
+    # the purchase is for LuxeBot's product (not a spoofed webhook for another product)
+    product_id = payload_data.get("product_id") or payload_data.get("product", {}).get("id", "")
+    expected_product = os.getenv("WHOP_PRODUCT_ID", "")  # Set in Railway env
+    if expected_product and product_id and str(product_id) != str(expected_product):
+        print(f"[Whop] Product ID mismatch — got {product_id}, expected {expected_product}")
+        return jsonify({"status": "product mismatch"}), 200
 
-    async def _remove():
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute("DELETE FROM premium_servers WHERE guild_id = ?", (guild_id,))
-            await db.commit()
+    # ── 4. Apply the action ───────────────────────────────────────────────────
+    GRANT_EVENTS  = {"membership.went_valid", "membership_activated", "membership.created"}
+    REVOKE_EVENTS = {
+        "membership.went_invalid", "membership_deactivated",
+        "membership.deleted", "membership_cancel_at_period_end_changed",
+        "membership.expired",
+    }
 
-    if event in ("membership.went_valid", "membership_activated"):
-        run_async(_add())
-        print(f"[Whop] Premium added: {guild_id}")
-    elif event in ("membership.went_invalid", "membership_deactivated",
-                   "membership.deleted", "membership_cancel_at_period_end_changed"):
-        run_async(_remove())
-        print(f"[Whop] Premium removed: {guild_id}")
+    if event in GRANT_EVENTS:
+        async def _grant():
+            async with aiosqlite.connect(DB_PATH) as db:
+                await db.execute(
+                    """INSERT INTO premium_servers (guild_id, expires_at)
+                       VALUES (?, '9999-12-31')
+                       ON CONFLICT(guild_id) DO UPDATE SET expires_at = '9999-12-31'""",
+                    (guild_id,)
+                )
+                await db.commit()
+        run_async(_grant())
+        print(f"[Whop] ✅ Premium GRANTED to guild {guild_id}")
 
-    # Bust the premium cache
+    elif event in REVOKE_EVENTS:
+        async def _revoke():
+            async with aiosqlite.connect(DB_PATH) as db:
+                # Clear paid premium but preserve trial record
+                await db.execute(
+                    "UPDATE premium_servers SET expires_at = NULL WHERE guild_id = ?",
+                    (guild_id,)
+                )
+                await db.commit()
+        run_async(_revoke())
+        print(f"[Whop] ❌ Premium REVOKED for guild {guild_id}")
+
+    else:
+        print(f"[Whop] Unhandled event type: {event} — no action taken")
+
+    # ── 5. Bust Redis cache ───────────────────────────────────────────────────
     try:
         async def _bust():
             from cache import invalidate_premium
@@ -1534,8 +1637,7 @@ def whop_webhook():
     except Exception:
         pass
 
-    return jsonify({"status": "ok"}), 200
-
+    return jsonify({"status": "ok", "event": event, "guild_id": guild_id}), 200
 
 # ── Top.gg vote helpers ──────────────────────────────────────────────────────
 
