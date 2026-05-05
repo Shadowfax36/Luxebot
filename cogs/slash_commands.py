@@ -928,6 +928,83 @@ class SlashCommands(commands.Cog):
             embed = discord.Embed(title="LuxeBot Premium", description="This server does not have premium access.\n\nGet premium for **$5/month**:\nhttps://whop.com/luxebot/luxebot-premium", color=0xFF6B6B)
         await interaction.response.send_message(embed=embed)
 
+
+    @app_commands.command(name="trial", description="Check your free trial or premium status")
+    async def slash_trial(self, interaction: discord.Interaction):
+        status = await db.get_premium_status(interaction.guild.id)
+        kind   = status["type"]
+        days   = status["days_left"]
+        hours  = status["hours_left"]
+        expires = status["expires_at"]
+
+        if kind == "premium" and expires == "lifetime":
+            embed = discord.Embed(
+                title="👑 LuxeBot Premium",
+                description="This server has **lifetime premium** access. All features permanently unlocked.",
+                color=BOT_COLOR
+            )
+
+        elif kind == "premium":
+            embed = discord.Embed(title="👑 LuxeBot Premium — Active", color=BOT_COLOR)
+            embed.add_field(name="Status", value="✅ Premium active", inline=True)
+            embed.add_field(name="Expires", value=f"`{expires}`", inline=True)
+            embed.add_field(name="Time remaining", value=f"**{days}d {hours}h**", inline=True)
+            embed.set_footer(text="Manage at whop.com/luxebot/luxebot-premium")
+
+        elif kind == "trial":
+            total_hours     = 7 * 24
+            remaining_hours = days * 24 + hours
+            filled = int((remaining_hours / total_hours) * 20)
+            bar = "█" * filled + "░" * (20 - filled)
+
+            color = 0xEF4444 if days == 0 else (0xF97316 if days <= 2 else BOT_COLOR)
+            embed = discord.Embed(title="🕐 Free Trial — Active", color=color)
+            embed.add_field(name="Trial expires", value=f"`{expires}`", inline=True)
+            embed.add_field(name="Time remaining", value=f"**{days}d {hours}h**", inline=True)
+            embed.add_field(
+                name="Progress",
+                value=f"`{bar}` {remaining_hours}h of {total_hours}h remaining",
+                inline=False
+            )
+            embed.add_field(
+                name="Keep all features after trial",
+                value="[👑 Subscribe for $5/month](https://whop.com/luxebot/luxebot-premium)",
+                inline=False
+            )
+            if days == 0:
+                embed.set_footer(text="⚠️ Trial expires today — subscribe now to avoid interruption!")
+            elif days <= 2:
+                embed.set_footer(text=f"⚠️ Expires in {days}d {hours}h — subscribe to keep access")
+            else:
+                embed.set_footer(text="LuxeBot Premium • $5/month • all features included")
+
+        elif kind == "expired":
+            embed = discord.Embed(
+                title="⏰ Trial Expired",
+                description=(
+                    "Your 7-day free trial has ended.\n\n"
+                    "**Subscribe to restore all features:**\n"
+                    "👑 [Get Premium — $5/month](https://whop.com/luxebot/luxebot-premium)\n\n"
+                    "One flat price. No feature tiers. No upsells."
+                ),
+                color=0xFF6B6B
+            )
+            embed.set_footer(text="whop.com/luxebot/luxebot-premium")
+
+        else:  # "none"
+            embed = discord.Embed(
+                title="No Trial Found",
+                description=(
+                    "No trial or premium record found for this server.\n\n"
+                    "This shouldn't happen — LuxeBot grants a trial automatically on join.\n"
+                    "Please contact support or subscribe directly:\n"
+                    "👑 [Get Premium — $5/month](https://whop.com/luxebot/luxebot-premium)"
+                ),
+                color=0x95A5A6
+            )
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
     @app_commands.command(name="dashboard", description="Get the link to the LuxeBot dashboard")
     async def slash_dashboard(self, interaction: discord.Interaction):
         embed = discord.Embed(
