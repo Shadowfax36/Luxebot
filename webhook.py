@@ -745,8 +745,10 @@ footer a{color:var(--gold)}
   <div class="logo">LUXE<span>BOT</span></div>
   <div class="nav-actions">
     {% if user %}
-      <a href="/servers" class="btn btn-gold">My Servers</a>
+      <a href="/servers" class="btn btn-gold">🖥️ Manage Servers</a>
       <a href="/logout" class="btn btn-outline">Logout</a>
+    {% else %}
+      <a href="/login" class="btn btn-outline">Login with Discord</a>
     {% endif %}
   </div>
 </nav>
