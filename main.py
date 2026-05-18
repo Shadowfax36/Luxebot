@@ -90,6 +90,80 @@ async def on_guild_join(guild):
             )
             await channel.send(embed=e)
             break
+    try:
+        owner = guild.owner
+        if owner:
+            dm_embed = discord.Embed(
+                title="Welcome to LuxeBot! Here is how to get set up",
+                description=(
+                    "Your **7-day free trial** is now active.\n\n"
+                    "**Get set up in 3 steps:**\n\n"
+                    "1. Run /automod to enable AI moderation\n"
+                    "2. Run /leveling to turn on XP and role rewards\n"
+                    "3. Run /ticket setup to create a support panel\n\n"
+                    "**Full dashboard:**\n"
+                    "https://luxebot-production.up.railway.app\n\n"
+                    "Trial expires in 7 days. Keep all features for $5/month:\n"
+                    "https://whop.com/luxebot/luxebot-premium\n\n"
+                    "Need help? https://discord.gg/saTswBaM"
+                ),
+                color=BOT_COLOR
+            )
+            dm_embed.set_footer(text="LuxeBot - The bot your server deserves")
+            await owner.send(embed=dm_embed)
+    except discord.Forbidden:
+        pass
+    except Exception:
+        pass
+    try:
+
+        owner = guild.owner
+
+        if owner:
+
+            dm_embed = discord.Embed(
+
+                title="Welcome to LuxeBot! Here is how to get set up",
+
+                description=(
+
+
+                    "**Get set up in 3 steps:**\n\n"
+
+                    "1. Run `/automod` to enable AI moderation\n"
+
+                    "2. Run `/leveling` to turn on XP and role rewards\n"
+
+                    "3. Run `/ticket setup` to create a support panel\n\n"
+
+                    "**Full dashboard:**\n"
+
+                    "https://luxebot-production.up.railway.app\n\n"
+
+                    "Trial expires in 7 days. Keep all features for $5/month:\n"
+
+                    "https://whop.com/luxebot/luxebot-premium\n\n"
+
+                    "Need help? https://discord.gg/saTswBaM"
+
+                ),
+
+                color=BOT_COLOR
+
+            )
+
+            dm_embed.set_footer(text="LuxeBot — The bot your server deserves")
+
+            await owner.send(embed=dm_embed)
+
+    except discord.Forbidden:
+
+        pass
+
+    except Exception:
+
+        pass
+
 
 
 bot.run(TOKEN)
